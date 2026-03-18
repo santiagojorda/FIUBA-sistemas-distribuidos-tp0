@@ -1,5 +1,7 @@
 import socket
 import logging
+import signal
+import threading
 
 
 class Server:
@@ -8,6 +10,14 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._server_socket.settimeout(1.0)
+        self._clients = []
+        self._shutdown_event = threading.Event()
+        signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
+
+    def __handle_graceful_shutdown(self, signum, frame):
+        self._shutdown_event.set()
+        logging.info('action: graceful_shutdown | result: in_progress')
 
     def run(self):
         """
@@ -20,9 +30,25 @@ class Server:
 
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
-        while True:
+        while not self._shutdown_event.is_set():
             client_sock = self.__accept_new_connection()
+            if client_sock is None:
+                continue
             self.__handle_client_connection(client_sock)
+
+        # Graceful shutdown: close all resources
+        try:
+            self._server_socket.close()
+        except OSError:
+            pass
+
+        for client in list(self._clients):
+            try:
+                client.close()
+            except OSError:
+                pass
+
+        logging.info('action: graceful_shutdown | result: success')
 
     def __handle_client_connection(self, client_sock):
         """
@@ -41,7 +67,11 @@ class Server:
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
-            client_sock.close()
+            self._clients.discard(client_sock) if isinstance(self._clients, set) else None
+            try:
+                client_sock.close()
+            except OSError:
+                pass
 
     def __accept_new_connection(self):
         """
@@ -51,8 +81,17 @@ class Server:
         Then connection created is printed and returned
         """
 
-        # Connection arrived
-        logging.info('action: accept_connections | result: in_progress')
-        c, addr = self._server_socket.accept()
-        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-        return c
+        try:
+            # Connection arrived
+            logging.info('action: accept_connections | result: in_progress')
+            c, addr = self._server_socket.accept()
+            self._clients.append(c)
+            logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+            return c
+        except socket.timeout:
+            return None
+        except OSError as e:
+            if self._shutdown_event.is_set():
+                return None
+            logging.error(f'action: accept_connections | result: fail | error: {e}')
+            return None
