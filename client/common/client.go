@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/op/go-logging"
@@ -21,15 +24,19 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config ClientConfig
-	conn   net.Conn
+	config          ClientConfig
+	conn            net.Conn
+	shutdown_event  chan os.Signal
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
 func NewClient(config ClientConfig) *Client {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGTERM)
 	client := &Client{
-		config: config,
+		config:         config,
+		shutdown_event: signalChan,
 	}
 	return client
 }
@@ -56,6 +63,18 @@ func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		// Check if shutdown signal received
+		select {
+		case <-c.shutdown_event:
+			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+			if c.conn != nil {
+				c.conn.Close()
+			}
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
+			return
+		default:
+		}
+
 		// Create the connection the server in every loop iteration. Send an
 		if err := c.createClientSocket(); err != nil {
 			return
