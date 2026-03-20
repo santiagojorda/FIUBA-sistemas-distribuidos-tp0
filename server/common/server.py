@@ -2,6 +2,72 @@ import socket
 import logging
 import signal
 import threading
+import json
+
+BUFFER = 1024
+DECODE = 'utf-8'
+
+class Player:
+    def __init__(self, name, lastname, dni, birthdate, number):
+        self.name = name
+        self.lastname = lastname
+        self.dni = dni
+        self.birthdate = birthdate
+        self.number = number
+    
+    def __repr__(self):
+        return f"Player(name={self.name}, lastname={self.lastname}, dni={self.dni}, birthdate={self.birthdate}, number={self.number})"
+
+class Client:
+    def __init__(self, ip, port, sock):
+        self._ip = ip
+        self._port = port
+        self.sock = sock
+        self.is_alive = True
+
+    def close(self):
+        self.is_alive = False
+        if self.sock is not None:
+            self.sock.close()
+    
+    def send(self, msg):
+        if self.sock is None:
+            return False
+        
+        data = msg.encode(DECODE) if isinstance(msg, str) else msg
+        total_sent = 0
+        while total_sent < len(data):
+            sent = self.sock.send(data[total_sent:])
+            if sent == 0:
+                return False  # Conexión cerrada
+            total_sent += sent
+        return True
+        
+    
+    def receive_message(self):
+        """Lee un mensaje de texto (no JSON) hasta encontrar newline"""
+        if self.sock is None:
+            return None
+        
+        data = b''
+        while True:
+            chunk = self.sock.recv(BUFFER)
+            if not chunk:
+                return None  # Conexión cerrada
+            data += chunk
+            if b'\n' in data:
+                break
+        
+        return data.rstrip().decode(DECODE)
+    
+    def receive_json(self):
+        """Lee un mensaje JSON hasta encontrar newline"""
+        msg = self.receive_message()
+        if msg is None:
+            return None
+        return json.loads(msg)
+
+
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -27,15 +93,11 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
         while not self._shutdown_event.is_set():
             client_sock = self.__accept_new_connection()
             if client_sock is None:
                 continue
             self.__handle_client_connection(client_sock)
-
-        # Graceful shutdown: close all resources
         try:
             self._server_socket.close()
         except OSError:
@@ -49,7 +111,7 @@ class Server:
 
         logging.info('action: graceful_shutdown | result: success')
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client):
         """
         Read message from a specific client socket and closes the socket
 
@@ -57,18 +119,35 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            # Primero leer el mensaje de agencia
+            agency_msg = client.receive_message()
+            if agency_msg is None:
+                logging.warning(f'action: receive_message | result: fail | ip: {client._ip} | error: connection closed')
+                return
+            logging.info(f'action: receive_message | result: success | ip: {client._ip} | msg: {agency_msg}')
+            
+            # Luego leer los mensajes JSON de los jugadores
+            while True:
+                player_json = client.receive_json()
+                if player_json is None:
+                    break
+                
+                # Crear objeto Player desde el JSON
+                player = Player(
+                    name=player_json.get('name'),
+                    lastname=player_json.get('lastname'),
+                    dni=player_json.get('dni'),
+                    birthdate=player_json.get('birthdate'),
+                    number=player_json.get('number')
+                )
+                
+                logging.info(f'action: receive_message | result: success | ip: {client._ip} | player: {player}')
+                client.send(f"{json.dumps(player_json)}\n")
+        except (OSError, json.JSONDecodeError) as e:
+            logging.error(f"action: receive_message | result: fail | ip: {client._ip} | error: {e}")
         finally:
-            self._clients.discard(client_sock) if isinstance(self._clients, set) else None
             try:
-                client_sock.close()
+                client.close()
             except OSError:
                 pass
 
@@ -84,9 +163,11 @@ class Server:
             # Connection arrived
             logging.info('action: accept_connections | result: in_progress')
             c, addr = self._server_socket.accept()
-            self._clients.append(c)
+
+            client = Client(addr[0], addr[1], c)
+            self._clients.append(client)
             logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-            return c
+            return client
         except socket.timeout:
             return None
         except OSError as e:

@@ -63,17 +63,35 @@ func NewClient(config ClientConfig, player Player) *Client {
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
 func (c *Client) createClientSocket() error {
-	conn, err := net.Dial("tcp", c.config.ServerAddress)
-	if err != nil {
-		log.Criticalf(
-			"action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return err
+	maxRetries := 30
+	retryDelay := time.Second
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		conn, err := net.Dial("tcp", c.config.ServerAddress)
+		if err == nil {
+			c.conn = conn
+			return nil
+		}
+		
+		if attempt < maxRetries {
+			log.Infof(
+				"action: connect | result: retry | client_id: %v | attempt: %v/%v | error: %v",
+				c.config.ID,
+				attempt,
+				maxRetries,
+				err,
+			)
+			time.Sleep(retryDelay)
+		} else {
+			log.Criticalf(
+				"action: connect | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return err
+		}
 	}
-	c.conn = conn
-	return nil
+	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
 
 func serializePlayer(player Player) ([]byte, error) {
@@ -114,41 +132,43 @@ func (c *Client) StartClientLoop() {
 		c.config.ID,
 	)
 
-
-	// envio cada jugador al servidor
-	for _, player := range c.players {
-		// verifico que no se haya recibido una señal de shutdown
-		select {
-		case <-c.shutdown_event:
-			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
-			if c.conn != nil {
-				c.conn.Close()
+	// Loop externo: repetir loop_amount veces
+	for loopCount := 0; loopCount < c.config.LoopAmount; loopCount++ {
+		// envio cada jugador al servidor
+		for _, player := range c.players {
+			// verifico que no se haya recibido una señal de shutdown
+			select {
+			case <-c.shutdown_event:
+				log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+				if c.conn != nil {
+					c.conn.Close()
+				}
+				log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
+				return
+			default:
 			}
-			log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
-			return
-		default:
-		}
 
-		// envio el mensaje de cada jugador al servidor
-		json_data, err := serializePlayer(player)
-		totalWritten := 0
-		for totalWritten < len(json_data) {
-			n, err := c.conn.Write(json_data[totalWritten:])
+			// envio el mensaje de cada jugador al servidor
+			json_data, err := serializePlayer(player)
+			totalWritten := 0
+			for totalWritten < len(json_data) {
+				n, err := c.conn.Write(json_data[totalWritten:])
+				if err != nil {
+					log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+					return
+				}
+				totalWritten += n
+			}
+				// Escribir un salto de línea después del mensaje JSON
+			_, err = c.conn.Write([]byte("\n"))
 			if err != nil {
 				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 				return
 			}
-			totalWritten += n
-		}
-			// Escribir un salto de línea después del mensaje JSON
-		_, err = c.conn.Write([]byte("\n"))
-		if err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
-		log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
+			log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
 
-		time.Sleep(c.config.LoopPeriod)
+			time.Sleep(c.config.LoopPeriod)
+		}
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
