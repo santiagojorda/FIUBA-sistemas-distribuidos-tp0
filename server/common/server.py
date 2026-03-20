@@ -3,7 +3,6 @@ import logging
 import signal
 import threading
 
-
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket

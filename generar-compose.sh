@@ -40,6 +40,11 @@ for i in $(seq 1 $AMOUNT_CLIENTS); do
     entrypoint: ["/client"]
     environment:
       - CLI_ID=$i
+      - CLI_PLAYER_NAME="nombre$i"
+      - CLI_PLAYER_LASTNAME="apellido$i"
+      - CLI_PLAYER_DNI="4086705$i"
+      - CLI_PLAYER_BIRTHDATE="1990-01-0$i"
+      - CLI_PLAYER_NUMBER="12345678$i"
     networks:
       - testing_net
     depends_on:
