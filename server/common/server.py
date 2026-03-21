@@ -4,19 +4,10 @@ import signal
 import threading
 import json
 
+from .utils import Bet, store_bets
+
 BUFFER = 1024
 DECODE = 'utf-8'
-
-class Player:
-    def __init__(self, name, lastname, dni, birthdate, number):
-        self.name = name
-        self.lastname = lastname
-        self.dni = dni
-        self.birthdate = birthdate
-        self.number = number
-    
-    def __repr__(self):
-        return f"Player(name={self.name}, lastname={self.lastname}, dni={self.dni}, birthdate={self.birthdate}, number={self.number})"
 
 class Client:
     def __init__(self, ip, port, sock):
@@ -24,6 +15,7 @@ class Client:
         self._port = port
         self.sock = sock
         self.is_alive = True
+        self._recv_buffer = b''
 
     def close(self):
         self.is_alive = False
@@ -48,17 +40,22 @@ class Client:
         """Lee un mensaje de texto (no JSON) hasta encontrar newline"""
         if self.sock is None:
             return None
-        
-        data = b''
+
         while True:
+            if b'\n' in self._recv_buffer:
+                line, self._recv_buffer = self._recv_buffer.split(b'\n', 1)
+                return line.decode(DECODE).rstrip('\r')
+
             chunk = self.sock.recv(BUFFER)
             if not chunk:
-                return None  # Conexión cerrada
-            data += chunk
-            if b'\n' in data:
-                break
-        
-        return data.rstrip().decode(DECODE)
+                # Si la conexión se cerró pero queda contenido parcial, devolverlo.
+                if self._recv_buffer:
+                    line = self._recv_buffer
+                    self._recv_buffer = b''
+                    return line.decode(DECODE).rstrip('\r')
+                return None
+
+            self._recv_buffer += chunk
     
     def receive_json(self):
         """Lee un mensaje JSON hasta encontrar newline"""
@@ -131,19 +128,29 @@ class Server:
                 player_json = client.receive_json()
                 if player_json is None:
                     break
+
+                # Some client env values are being sent with surrounding quotes.
+                # Normalize before constructing Bet to avoid parse errors.
+                def _clean(value):
+                    if isinstance(value, str):
+                        return value.strip().strip('"')
+                    return value
                 
-                # Crear objeto Player desde el JSON
-                player = Player(
-                    name=player_json.get('name'),
-                    lastname=player_json.get('lastname'),
-                    dni=player_json.get('dni'),
-                    birthdate=player_json.get('birthdate'),
-                    number=player_json.get('number')
+                bet = Bet(
+                    agency=_clean(agency_msg),
+                    first_name=_clean(player_json['name']),
+                    last_name=_clean(player_json['lastname']),
+                    document=_clean(player_json['dni']),
+                    birthdate=_clean(player_json['birthdate']),
+                    number=_clean(player_json['number'])
                 )
                 
-                logging.info(f'action: receive_message | result: success | ip: {client._ip} | player: {player}')
+                store_bets([bet])
+                logging.info(f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}")
+
+                logging.info(f'action: receive_message | result: success | ip: {client._ip} | bet: {bet}')
                 client.send(f"{json.dumps(player_json)}\n")
-        except (OSError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
             logging.error(f"action: receive_message | result: fail | ip: {client._ip} | error: {e}")
         finally:
             try:

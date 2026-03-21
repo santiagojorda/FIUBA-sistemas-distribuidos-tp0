@@ -14,8 +14,14 @@ services:
     container_name: client1
     image: client:latest
     entrypoint: ["/client"]
+    restart: no
     environment:
       - CLI_ID=1
+      - NOMBRE=nombre1
+      - APELLIDO=apellido1
+      - DOCUMENTO=40867051
+      - NACIMIENTO=1990-01-01
+      - NUMERO=123456781
     networks:
       - testing_net
     depends_on:

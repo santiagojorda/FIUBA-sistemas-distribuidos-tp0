@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 	"encoding/json"
+	"time"
 
 	"github.com/op/go-logging"
 )
@@ -18,8 +18,6 @@ var log = logging.MustGetLogger("log")
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
-	LoopAmount    int
-	LoopPeriod    time.Duration
 }
 
 // Client Entity that encapsulates how
@@ -75,7 +73,7 @@ func (c *Client) createClientSocket() error {
 		
 		if attempt < maxRetries {
 			log.Infof(
-				"action: connect | result: retry | client_id: %v | attempt: %v/%v | error: %v",
+				"action: connect | result: in_progress | client_id: %v | attempt: %v/%v | error: %v",
 				c.config.ID,
 				attempt,
 				maxRetries,
@@ -128,47 +126,47 @@ func (c *Client) StartClientLoop() {
 	// Envio el mensaje de agencia al servidor
 	fmt.Fprintf(
 		c.conn,
-		"[AGENCY] %s\n",
+		"%s\n",
 		c.config.ID,
 	)
 
-	// Loop externo: repetir loop_amount veces
-	for loopCount := 0; loopCount < c.config.LoopAmount; loopCount++ {
-		// envio cada jugador al servidor
-		for _, player := range c.players {
-			// verifico que no se haya recibido una señal de shutdown
-			select {
-			case <-c.shutdown_event:
-				log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
-				if c.conn != nil {
-					c.conn.Close()
-				}
-				log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
-				return
-			default:
+	// envio cada jugador al servidor
+	for _, player := range c.players {
+		// verifico que no se haya recibido una señal de shutdown
+		select {
+		case <-c.shutdown_event:
+			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+			if c.conn != nil {
+				c.conn.Close()
 			}
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
+			return
+		default:
+		}
 
-			// envio el mensaje de cada jugador al servidor
-			json_data, err := serializePlayer(player)
-			totalWritten := 0
-			for totalWritten < len(json_data) {
-				n, err := c.conn.Write(json_data[totalWritten:])
-				if err != nil {
-					log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-					return
-				}
-				totalWritten += n
-			}
-				// Escribir un salto de línea después del mensaje JSON
-			_, err = c.conn.Write([]byte("\n"))
+		// envio el mensaje de cada jugador al servidor
+		json_data, err := serializePlayer(player)
+		totalWritten := 0
+		for totalWritten < len(json_data) {
+			n, err := c.conn.Write(json_data[totalWritten:])
 			if err != nil {
 				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 				return
 			}
-			log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
-
-			time.Sleep(c.config.LoopPeriod)
+			totalWritten += n
 		}
+
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
+
+
+			// Escribir un salto de línea después del mensaje JSON
+		_, err = c.conn.Write([]byte("\n"))
+		if err != nil {
+			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return
+		}
+		log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
+
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }

@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/op/go-logging"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
@@ -33,17 +31,15 @@ func InitConfig() (*viper.Viper, error) {
 
 	// Add env variables supported
 	v.BindEnv("id")
-	v.BindEnv("server", "address")
-	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "amount")
-	v.BindEnv("log", "level")
+	v.BindEnv("server.address")
+	v.BindEnv("loop.period")
 
 	// Add env variables for player information
-	v.BindEnv("player", "player")
-	v.BindEnv("player", "lastname")
-	v.BindEnv("player", "dni")
-	v.BindEnv("player", "birthdate")
-	v.BindEnv("player", "number")
+	v.BindEnv("NOMBRE", "NOMBRE")
+	v.BindEnv("APELLIDO", "APELLIDO")
+	v.BindEnv("DOCUMENTO", "DOCUMENTO")
+	v.BindEnv("NACIMIENTO", "NACIMIENTO")
+	v.BindEnv("NUMERO", "NUMERO")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -52,12 +48,6 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
-	}
-
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
-
-	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
 
 	return v, nil
@@ -88,11 +78,9 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_amount: %v | loop_period: %v | log_level: %s",
+	log.Infof("action: config | result: success | client_id: %s | server_address: %s  | log_level: %s",
 		v.GetString("id"),
 		v.GetString("server.address"),
-		v.GetInt("loop.amount"),
-		v.GetDuration("loop.period"),
 		v.GetString("log.level"),
 	)
 }
@@ -100,11 +88,11 @@ func PrintConfig(v *viper.Viper) {
 func PrintPlayer(v *viper.Viper) {
 	log.Infof("action: config | result: success | client_id: %s | player_name: %s | player_lastname: %s | player_dni: %s | player_birthdate: %s | player_number: %s",
 		v.GetString("id"),
-		v.GetString("player.name"),
-		v.GetString("player.lastname"),
-		v.GetString("player.dni"),
-		v.GetString("player.birthdate"),
-		v.GetString("player.number"),
+		v.GetString("NOMBRE"),
+		v.GetString("APELLIDO"),
+		v.GetString("DOCUMENTO"),
+		v.GetString("NACIMIENTO"),
+		v.GetString("NUMERO"),
 	)
 }
 
@@ -125,16 +113,14 @@ func main() {
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
 	}
 
 	player := common.Player{
-		Name:      v.GetString("player.name"),
-		Lastname:  v.GetString("player.lastname"),
-		Dni:       v.GetString("player.dni"),
-		Birthdate: v.GetString("player.birthdate"),
-		Number:    v.GetString("player.number"),
+		Name:      v.GetString("NOMBRE"),
+		Lastname:  v.GetString("APELLIDO"),
+		Dni:       v.GetString("DOCUMENTO"),
+		Birthdate: v.GetString("NACIMIENTO"),
+		Number:    v.GetString("NUMERO"),
 	}
 
 	client := common.NewClient(clientConfig, player)
