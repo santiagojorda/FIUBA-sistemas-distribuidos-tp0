@@ -1,6 +1,10 @@
 package common
 
-import "net"
+import (
+	"bufio"
+	"net"
+	"strings"
+)
 
 func writeAll(conn net.Conn, data []byte) error {
 	totalWritten := 0
@@ -13,4 +17,13 @@ func writeAll(conn net.Conn, data []byte) error {
 	}
 
 	return nil
+}
+
+func readLine(reader *bufio.Reader) (string, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(line), nil
 }

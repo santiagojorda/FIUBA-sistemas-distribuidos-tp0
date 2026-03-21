@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -23,6 +24,7 @@ type ClientConfig struct {
 type Client struct {
 	config          ClientConfig
 	conn            net.Conn
+	reader          *bufio.Reader
 	shutdown_event  chan os.Signal
 	players         []Player
 }
@@ -51,6 +53,7 @@ func (c *Client) createClientSocket() error {
 		conn, err := net.Dial("tcp", c.config.ServerAddress)
 		if err == nil {
 			c.conn = conn
+			c.reader = bufio.NewReader(conn)
 			return nil
 		}
 		
@@ -120,14 +123,19 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
-
-
 			// Escribir un salto de línea después del mensaje JSON
 		if err := writeAll(c.conn, []byte("\n")); err != nil {
 			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return
 		}
+
+		confirmation, err := readLine(c.reader)
+		if err != nil || confirmation == "" {
+			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return
+		}
+
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
 		log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
 
 	}

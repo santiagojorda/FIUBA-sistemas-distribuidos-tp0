@@ -16,6 +16,6 @@ func serializePlayer(player Player) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Infof("action: serialize_player | result: success | client_id: %v | player: %v", player.Name, player.Lastname)
+	log.Infof("action: serialize_player | result: success | client_id: %v | player: %v", player.Dni, player.Name + " " + player.Lastname)
 	return jsonData, nil
 }
