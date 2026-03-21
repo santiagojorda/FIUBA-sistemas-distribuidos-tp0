@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"encoding/json"
 	"time"
 
 	"github.com/op/go-logging"
@@ -26,22 +25,6 @@ type Client struct {
 	conn            net.Conn
 	shutdown_event  chan os.Signal
 	players         []Player
-}
-
-type ProtocolMessage struct {
-	Name string `json:"name"`
-	Lastname string `json:"lastname"`
-	Dni string `json:"dni"`
-	Birthdate string `json:"birthdate"`
-	Number string `json:"number"`
-}
-
-type Player struct{
-	Name string
-  Lastname string
-  Dni string
-  Birthdate string
-  Number string	
 }
 
 // NewClient Initializes a clientnew client receiving the configuration
@@ -92,25 +75,6 @@ func (c *Client) createClientSocket() error {
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
 
-func serializePlayer(player Player) ([]byte, error) {
-	
-	protocolMsg := ProtocolMessage{
-		Name: player.Name,
-		Lastname: player.Lastname,
-		Dni: player.Dni,
-		Birthdate: player.Birthdate,
-		Number: player.Number,
-	}
-	
-	json_data, err := json.Marshal(protocolMsg)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("action: serialize_player | result: success | client_id: %v | player: %v", player.Name, player.Lastname)
-
-	return json_data, nil
-}
-
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
 
@@ -145,23 +109,22 @@ func (c *Client) StartClientLoop() {
 		}
 
 		// envio el mensaje de cada jugador al servidor
-		json_data, err := serializePlayer(player)
-		totalWritten := 0
-		for totalWritten < len(json_data) {
-			n, err := c.conn.Write(json_data[totalWritten:])
-			if err != nil {
-				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-				return
-			}
-			totalWritten += n
+		jsonData, err := serializePlayer(player)
+		if err != nil {
+			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return
+		}
+
+		if err := writeAll(c.conn, jsonData); err != nil {
+			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			return
 		}
 
 		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
 
 
 			// Escribir un salto de línea después del mensaje JSON
-		_, err = c.conn.Write([]byte("\n"))
-		if err != nil {
+		if err := writeAll(c.conn, []byte("\n")); err != nil {
 			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return
 		}

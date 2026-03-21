@@ -5,66 +5,7 @@ import threading
 import json
 
 from .utils import Bet, store_bets
-
-BUFFER = 1024
-DECODE = 'utf-8'
-
-class Client:
-    def __init__(self, ip, port, sock):
-        self._ip = ip
-        self._port = port
-        self.sock = sock
-        self.is_alive = True
-        self._recv_buffer = b''
-
-    def close(self):
-        self.is_alive = False
-        if self.sock is not None:
-            self.sock.close()
-    
-    def send(self, msg):
-        if self.sock is None:
-            return False
-        
-        data = msg.encode(DECODE) if isinstance(msg, str) else msg
-        total_sent = 0
-        while total_sent < len(data):
-            sent = self.sock.send(data[total_sent:])
-            if sent == 0:
-                return False  # Conexión cerrada
-            total_sent += sent
-        return True
-        
-    
-    def receive_message(self):
-        """Lee un mensaje de texto (no JSON) hasta encontrar newline"""
-        if self.sock is None:
-            return None
-
-        while True:
-            if b'\n' in self._recv_buffer:
-                line, self._recv_buffer = self._recv_buffer.split(b'\n', 1)
-                return line.decode(DECODE).rstrip('\r')
-
-            chunk = self.sock.recv(BUFFER)
-            if not chunk:
-                # Si la conexión se cerró pero queda contenido parcial, devolverlo.
-                if self._recv_buffer:
-                    line = self._recv_buffer
-                    self._recv_buffer = b''
-                    return line.decode(DECODE).rstrip('\r')
-                return None
-
-            self._recv_buffer += chunk
-    
-    def receive_json(self):
-        """Lee un mensaje JSON hasta encontrar newline"""
-        msg = self.receive_message()
-        if msg is None:
-            return None
-        return json.loads(msg)
-
-
+from .client import Client
 
 class Server:
     def __init__(self, port, listen_backlog):
