@@ -2,13 +2,13 @@ package common
 
 import "encoding/json"
 
-func serializePlayer(player Player) ([]byte, error) {
+func serializeBet(bet Bet) ([]byte, error) {
 	protocolMsg := ProtocolMessage{
-		Name:      player.Name,
-		Lastname:  player.Lastname,
-		Dni:       player.Dni,
-		Birthdate: player.Birthdate,
-		Number:    player.Number,
+		Name:      bet.Name,
+		Lastname:  bet.Lastname,
+		Dni:       bet.Dni,
+		Birthdate: bet.Birthdate,
+		Number:    bet.Number,
 	}
 
 	jsonData, err := json.Marshal(protocolMsg)
@@ -16,6 +16,6 @@ func serializePlayer(player Player) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Infof("action: serialize_player | result: success | client_id: %v | player: %v", player.Dni, player.Name + " " + player.Lastname)
+	log.Infof("action: serialize_bet | result: success | client_id: %v | bet: %v", bet.Dni, bet.Name + " " + bet.Lastname)
 	return jsonData, nil
 }

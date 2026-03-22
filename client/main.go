@@ -34,13 +34,6 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("server.address")
 	v.BindEnv("loop.period")
 
-	// Add env variables for player information
-	v.BindEnv("NOMBRE", "NOMBRE")
-	v.BindEnv("APELLIDO", "APELLIDO")
-	v.BindEnv("DOCUMENTO", "DOCUMENTO")
-	v.BindEnv("NACIMIENTO", "NACIMIENTO")
-	v.BindEnv("NUMERO", "NUMERO")
-
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
 	// can be loaded from the environment variables so we shouldn't
@@ -85,17 +78,6 @@ func PrintConfig(v *viper.Viper) {
 	)
 }
 
-func PrintPlayer(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | player_name: %s | player_lastname: %s | player_dni: %s | player_birthdate: %s | player_number: %s",
-		v.GetString("id"),
-		v.GetString("NOMBRE"),
-		v.GetString("APELLIDO"),
-		v.GetString("DOCUMENTO"),
-		v.GetString("NACIMIENTO"),
-		v.GetString("NUMERO"),
-	)
-}
-
 func main() {
 	v, err := InitConfig()
 	if err != nil {
@@ -108,21 +90,12 @@ func main() {
 
 	// Print program config with debugging purposes
 	PrintConfig(v)
-	PrintPlayer(v)
 
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
 	}
 
-	player := common.Player{
-		Name:      v.GetString("NOMBRE"),
-		Lastname:  v.GetString("APELLIDO"),
-		Dni:       v.GetString("DOCUMENTO"),
-		Birthdate: v.GetString("NACIMIENTO"),
-		Number:    v.GetString("NUMERO"),
-	}
-
-	client := common.NewClient(clientConfig, player)
+	client := common.NewClient(clientConfig)
 	client.StartClientLoop()
 }

@@ -8,7 +8,7 @@ type ProtocolMessage struct {
 	Number    string `json:"number"`
 }
 
-type Player struct {
+type Bet struct {
 	Name      string
 	Lastname  string
 	Dni       string

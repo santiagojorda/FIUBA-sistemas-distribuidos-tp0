@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"encoding/csv"
 
 	"github.com/op/go-logging"
 )
@@ -26,19 +27,19 @@ type Client struct {
 	conn            net.Conn
 	reader          *bufio.Reader
 	shutdown_event  chan os.Signal
-	players         []Player
+	bets         []Bet
+	
 }
 
 // NewClient Initializes a clientnew client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig, player Player) *Client {
+func NewClient(config ClientConfig) *Client {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
 	client := &Client{
 		config:         config,
 		shutdown_event: signalChan,
 	}
-	client.players = append(client.players, player)
 	return client
 }
 
@@ -78,6 +79,37 @@ func (c *Client) createClientSocket() error {
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
 
+func readBetsFromCSV(filePath string) ([]Bet, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("error reading CSV: %v", err)
+	}
+
+	var bets []Bet
+
+	for _, record := range records {
+		if len(record) < 5 {
+			continue // Skip rows with insufficient data
+		}
+		bet := Bet{
+			Name:   record[0],
+			Lastname: record[1],
+			Dni:    record[2],
+			Birthdate: record[3],
+			Number: record[4],
+		}
+		bets = append(bets, bet)
+	}
+	return bets, nil
+}
+
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
 
@@ -90,15 +122,21 @@ func (c *Client) StartClientLoop() {
 		return
 	}
 
+	// leer datos de jugadores desde el archivo CSV
+	bets, err := readBetsFromCSV(fmt.Sprintf(".data/agency-%s.csv", c.config.ID))
+	if err != nil {
+		log.Errorf("action: read_bets_from_csv | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	c.bets = bets
+	log.Infof("action: read_bets_from_csv | result: success | client_id: %v | bets_count: %v", c.config.ID, len(c.bets))
+
+
 	// Envio el mensaje de agencia al servidor
-	fmt.Fprintf(
-		c.conn,
-		"%s\n",
-		c.config.ID,
-	)
+	fmt.Fprintf(c.conn, "%s\n", c.config.ID)
 
 	// envio cada jugador al servidor
-	for _, player := range c.players {
+	for _, bet := range c.bets {
 		// verifico que no se haya recibido una señal de shutdown
 		select {
 		case <-c.shutdown_event:
@@ -112,7 +150,7 @@ func (c *Client) StartClientLoop() {
 		}
 
 		// envio el mensaje de cada jugador al servidor
-		jsonData, err := serializePlayer(player)
+		jsonData, err := serializeBet(bet)
 		if err != nil {
 			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return
@@ -135,8 +173,8 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
-		log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", bet.Dni, bet.Number)
+		log.Infof("action: send_message | result: success | client_id: %v | bet: %v", c.config.ID, bet.Name)
 
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)

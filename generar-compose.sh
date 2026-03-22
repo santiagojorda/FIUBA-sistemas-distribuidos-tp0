@@ -52,6 +52,7 @@ for i in $(seq 1 $AMOUNT_CLIENTS); do
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
 EOL
 
 done
