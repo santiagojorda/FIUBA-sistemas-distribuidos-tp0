@@ -2,18 +2,22 @@ package common
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	"encoding/csv"
+	"strings"
 
 	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("log")
+var builder strings.Builder
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
@@ -26,9 +30,7 @@ type Client struct {
 	config          ClientConfig
 	conn            net.Conn
 	reader          *bufio.Reader
-	shutdown_event  chan os.Signal
-	bets         []Bet
-	
+	shutdown_event  chan os.Signal	
 }
 
 // NewClient Initializes a clientnew client receiving the configuration
@@ -79,41 +81,9 @@ func (c *Client) createClientSocket() error {
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
 
-func readBetsFromCSV(filePath string) ([]Bet, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, fmt.Errorf("error reading CSV: %v", err)
-	}
-
-	var bets []Bet
-
-	for _, record := range records {
-		if len(record) < 5 {
-			continue // Skip rows with insufficient data
-		}
-		bet := Bet{
-			Name:   record[0],
-			Lastname: record[1],
-			Dni:    record[2],
-			Birthdate: record[3],
-			Number: record[4],
-		}
-		bets = append(bets, bet)
-	}
-	return bets, nil
-}
-
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-
-	// creo el socket del cliente
+	// Crear el socket del cliente
 	if err := c.createClientSocket(); err != nil {
 		log.Errorf("action: create_client_socket | result: fail | client_id: %v | error: %v",
 			c.config.ID,
@@ -122,60 +92,125 @@ func (c *Client) StartClientLoop() {
 		return
 	}
 
-	// leer datos de jugadores desde el archivo CSV
-	bets, err := readBetsFromCSV(fmt.Sprintf(".data/agency-%s.csv", c.config.ID))
-	if err != nil {
-		log.Errorf("action: read_bets_from_csv | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
-	}
-	c.bets = bets
-	log.Infof("action: read_bets_from_csv | result: success | client_id: %v | bets_count: %v", c.config.ID, len(c.bets))
-
-
-	// Envio el mensaje de agencia al servidor
+	// Enviar el mensaje de agencia al servidor
 	fmt.Fprintf(c.conn, "%s\n", c.config.ID)
 
-	// envio cada jugador al servidor
-	for _, bet := range c.bets {
-		// verifico que no se haya recibido una señal de shutdown
+	file, err := os.Open(fmt.Sprintf(".data/agency-%s.csv", c.config.ID))
+	if err != nil {
+		log.Errorf("action: open_file | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	temp_bet := Bet{}
+
+	for {
+		// Verificar señal de shutdown ANTES de procesar el batch
 		select {
 		case <-c.shutdown_event:
 			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
 			if c.conn != nil {
 				c.conn.Close()
 			}
-			log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
 			return
 		default:
 		}
 
-		// envio el mensaje de cada jugador al servidor
-		jsonData, err := serializeBet(bet)
-		if err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
+		bets := []Bet{}
+		packageSize := 0
+		if temp_bet.Name != "" {
+			bets = append(bets, temp_bet)
+			packageSize += len(temp_bet.Name) + len(temp_bet.Lastname) + len(temp_bet.Dni) + len(temp_bet.Birthdate) + len(temp_bet.Number)
+			temp_bet = Bet{}
+			log.Infof("action: read_bets_from_csv | result: in_progress | bet: %v | package_size: %v", bets[0].Name+" "+bets[0].Lastname, packageSize)
 		}
 
-		if err := writeAll(c.conn, jsonData); err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
+		// Leer líneas del CSV hasta llenar el buffer de 8KB o llegar al EOF
+		for {
+			record, err := reader.Read()
+			if err != nil {
+				if err.Error() == "EOF" {
+					log.Infof("action: read_bets_from_csv | result: EOF_reached | bets_count: %v", len(bets))
+					break
+				}
+				log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
+				return
+			}
+
+			if len(record) < 5 {
+				log.Errorf("CSV file does not contain enough columns")
+				continue
+			}
+
+			bet := Bet{
+				Name:      record[0],
+				Lastname:  record[1],
+				Dni:       record[2],
+				Birthdate: record[3],
+				Number:    record[4],
+			}
+
+			chunkBSize := len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number)
+			bufferSize := 8 * 1024
+
+			if chunkBSize+packageSize >= bufferSize {
+				temp_bet = bet
+				log.Infof("action: read_bets_from_csv | result: package_full | package_size: %v", packageSize)
+				break
+			} else {
+				packageSize += chunkBSize
+				bets = append(bets, bet)
+			}
 		}
 
-			// Escribir un salto de línea después del mensaje JSON
-		if err := writeAll(c.conn, []byte("\n")); err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
+		// Si no hay bets y llegamos al EOF, terminar
+		if len(bets) == 0 {
+			log.Infof("action: read_bets_from_csv | result: success | no_more_bets")
+			break
 		}
 
+		// Construir el batch: cantidad + datos delimitados por |
+		var batchData bytes.Buffer
+		batchData.WriteString(strconv.Itoa(len(bets)))
+		batchData.WriteString("\n")
+
+		for _, bet := range bets {
+			batchData.WriteString(bet.Name)
+			batchData.WriteString("|")
+			batchData.WriteString(bet.Lastname)
+			batchData.WriteString("|")
+			batchData.WriteString(bet.Dni)
+			batchData.WriteString("|")
+			batchData.WriteString(bet.Birthdate)
+			batchData.WriteString("|")
+			batchData.WriteString(bet.Number)
+			batchData.WriteString("\n")
+		}
+
+		// Enviar el batch
+		payload := batchData.Bytes()
+		escritos := 0
+
+		for escritos < len(payload) {
+				n, err := c.conn.Write(payload[escritos:])
+				escritos += n 
+				
+				if err != nil {
+						log.Errorf("action: send_batch | result: fail | error: %v", err)
+						return
+				}
+		}
+
+		// Esperar confirmación del servidor
 		confirmation, err := readLine(c.reader)
 		if err != nil || confirmation == "" {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			log.Errorf("action: receive_confirmation | result: fail | error: %v", err)
 			return
 		}
 
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", bet.Dni, bet.Number)
-		log.Infof("action: send_message | result: success | client_id: %v | bet: %v", c.config.ID, bet.Name)
-
+		log.Infof("action: batch_enviado | result: success | cantidad: %v", len(bets))
 	}
+
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }

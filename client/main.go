@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -40,7 +39,7 @@ func InitConfig() (*viper.Viper, error) {
 	// return an error in that case
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
-		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
+		log.Warningf("action: read_config | result: in_progress | message: configuration file not found, using env variables")
 	}
 
 	return v, nil
@@ -79,6 +78,10 @@ func PrintConfig(v *viper.Viper) {
 }
 
 func main() {
+	if err := InitLogger("INFO"); err != nil {
+		log.Criticalf("%s", err)
+	}
+
 	v, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
