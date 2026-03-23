@@ -131,7 +131,7 @@ func (c *Client) StartClientLoop() {
 			record, err := reader.Read()
 			if err != nil {
 				if err.Error() == "EOF" {
-					log.Infof("action: read_bets_from_csv | result: EOF_reached | bets_count: %v", len(bets))
+					log.Infof("action: read_bets_from_csv | result: success | status: eof_reached | bets_count: %v", len(bets))
 					break
 				}
 				log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
@@ -156,7 +156,7 @@ func (c *Client) StartClientLoop() {
 
 			if chunkBSize+packageSize >= bufferSize {
 				temp_bet = bet
-				log.Infof("action: read_bets_from_csv | result: package_full | package_size: %v", packageSize)
+				log.Infof("action: read_bets_from_csv | result: in_progress | status: package_full | package_size: %v", packageSize)
 				break
 			} else {
 				packageSize += chunkBSize
@@ -166,7 +166,7 @@ func (c *Client) StartClientLoop() {
 
 		// Si no hay bets y llegamos al EOF, terminar
 		if len(bets) == 0 {
-			log.Infof("action: read_bets_from_csv | result: success | no_more_bets")
+			log.Infof("action: read_bets_from_csv | result: success | status: no_more_bets")
 			break
 		}
 

@@ -2,7 +2,6 @@ import socket
 import logging
 import signal
 import threading
-import json
 
 from .utils import Bet, store_bets
 from .client import Client
@@ -63,35 +62,47 @@ class Server:
                 logging.warning(f'action: receive_message | result: fail | ip: {client._ip} | error: connection closed')
                 return
             logging.info(f'action: receive_message | result: success | ip: {client._ip} | msg: {agency_msg}')
-            
-            # Luego leer los mensajes JSON de los jugadores
+
+            # Luego leer batches en formato:
+            # <cantidad>\n
+            # nombre|apellido|dni|fecha|numero\n
             while True:
-                player_json = client.receive_json()
-                if player_json is None:
+                count_msg = client.receive_message()
+                if count_msg is None:
                     break
 
-                # Some client env values are being sent with surrounding quotes.
-                # Normalize before constructing Bet to avoid parse errors.
-                def _clean(value):
-                    if isinstance(value, str):
-                        return value.strip().strip('"')
-                    return value
-                
-                bet = Bet(
-                    agency=_clean(agency_msg),
-                    first_name=_clean(player_json['name']),
-                    last_name=_clean(player_json['lastname']),
-                    document=_clean(player_json['dni']),
-                    birthdate=_clean(player_json['birthdate']),
-                    number=_clean(player_json['number'])
-                )
-                
-                store_bets([bet])
-                logging.info(f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}")
+                count_msg = count_msg.strip()
+                if count_msg == '':
+                    continue
 
-                logging.info(f'action: receive_message | result: success | ip: {client._ip} | bet: {bet}')
-                client.send(f"{json.dumps(player_json)}\n")
-        except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
+                batch_count = int(count_msg)
+                bets = []
+
+                for _ in range(batch_count):
+                    raw_bet = client.receive_message()
+                    if raw_bet is None:
+                        raise ValueError('connection closed while receiving batch')
+
+                    fields = [field.strip().strip('"') for field in raw_bet.split('|')]
+                    if len(fields) != 5:
+                        raise ValueError(f'invalid bet format: {raw_bet}')
+
+                    bet = Bet(
+                        agency=agency_msg.strip().strip('"'),
+                        first_name=fields[0],
+                        last_name=fields[1],
+                        document=fields[2],
+                        birthdate=fields[3],
+                        number=fields[4]
+                    )
+                    bets.append(bet)
+
+                store_bets(bets)
+                logging.info(
+                    f'action: apuesta_recibida | result: success | agency: {agency_msg} | cantidad: {len(bets)}'
+                )
+                client.send('ok\n')
+        except (OSError, ValueError, KeyError) as e:
             logging.error(f"action: receive_message | result: fail | ip: {client._ip} | error: {e}")
         finally:
             try:
