@@ -63,9 +63,9 @@ class Server:
         try:
             # Connection arrived
             logging.info('action: accept_connections | result: in_progress')
-            c, addr = self._server_socket.accept()
+            client_socket, addr = self._server_socket.accept()
 
-            client = Client(addr[0], addr[1], c)
+            client = Client(addr[0], addr[1], client_socket)
             self._clients.append(client)
             logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
             return client

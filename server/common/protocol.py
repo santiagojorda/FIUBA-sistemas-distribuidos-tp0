@@ -1,4 +1,4 @@
-from .utils import Bet
+from .bet import Bet
 
 
 def parse_agency(raw_agency: str) -> str:
