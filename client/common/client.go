@@ -16,6 +16,10 @@ import (
 	"github.com/op/go-logging"
 )
 
+const CANTIDAD_CAMPOS_BETS = 5
+const BUFFER_SIZE = 8 * 1024
+const SOCKET_CONNECTION_MAX_RETRIES = 5
+
 var log = logging.MustGetLogger("log")
 var builder strings.Builder
 
@@ -23,6 +27,7 @@ var builder strings.Builder
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
+	MaxBatchAmount int
 }
 
 // Client Entity that encapsulates how
@@ -31,6 +36,7 @@ type Client struct {
 	conn            net.Conn
 	reader          *bufio.Reader
 	shutdown_event  chan os.Signal	
+	maxBatchAmount  int
 }
 
 // NewClient Initializes a clientnew client receiving the configuration
@@ -41,7 +47,10 @@ func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config:         config,
 		shutdown_event: signalChan,
+    maxBatchAmount: config.MaxBatchAmount,
 	}
+
+
 	return client
 }
 
@@ -49,14 +58,22 @@ func NewClient(config ClientConfig) *Client {
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
 func (c *Client) createClientSocket() error {
-	maxRetries := 30
+	maxRetries := SOCKET_CONNECTION_MAX_RETRIES
 	retryDelay := time.Second
 	
+
+	// Intentar conectar al servidor con tcp con reintentos 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		conn, err := net.Dial("tcp", c.config.ServerAddress)
 		if err == nil {
 			c.conn = conn
 			c.reader = bufio.NewReader(conn)
+				log.Infof(
+					"action: connect | result: success | client_id: %v | attempt: %v/%v",
+					c.config.ID,
+					attempt,
+					maxRetries,
+				)
 			return nil
 		}
 		
@@ -81,6 +98,66 @@ func (c *Client) createClientSocket() error {
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
 }
 
+func checkShutdown(c *Client) bool {
+	select {
+	case <-c.shutdown_event:
+		log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+		if c.conn != nil {
+			c.conn.Close()
+			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v | connection_closed: true", c.config.ID)
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func readBetsFromCSV(reader *csv.Reader, bets *[]Bet, packageSize *int, temp_bet *Bet, c *Client) {
+	for {
+
+		if len(*bets) >= c.maxBatchAmount {
+			log.Infof("action: read_bets_from_csv | result: in_progress | status: batch_limit_reached | bets_count: %v", len(*bets))
+			break
+		}
+
+
+		record, err := reader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				log.Infof("action: read_bets_from_csv | result: success | status: eof_reached | bets_count: %v", len(*bets))
+				break
+			}
+			log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
+			return
+		}
+
+		if len(record) < CANTIDAD_CAMPOS_BETS {
+			log.Errorf("CSV file does not contain enough columns")
+			continue
+		}
+
+		bet := Bet{
+			Name:      record[0],
+			Lastname:  record[1],
+			Dni:       record[2],
+			Birthdate: record[3],
+			Number:    record[4],
+		}
+
+		chunkBSize := len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number)
+		bufferSize := BUFFER_SIZE
+
+		if chunkBSize+*packageSize >= bufferSize {
+			*temp_bet = bet
+			log.Infof("action: read_bets_from_csv | result: in_progress | status: package_full | package_size: %v", packageSize)
+			break
+		} else {
+			*packageSize += chunkBSize
+			*bets = append(*bets, bet)
+		}
+	}
+}
+
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
 	// Crear el socket del cliente
@@ -92,9 +169,11 @@ func (c *Client) StartClientLoop() {
 		return
 	}
 
-	// Enviar el mensaje de agencia al servidor
+	// Enviar el mensaje del id de agencia al servidor
 	fmt.Fprintf(c.conn, "%s\n", c.config.ID)
 
+
+	// Abrir el archivo CSV correspondiente a la agencia
 	file, err := os.Open(fmt.Sprintf(".data/agency-%s.csv", c.config.ID))
 	if err != nil {
 		log.Errorf("action: open_file | result: fail | client_id: %v | error: %v", c.config.ID, err)
@@ -107,16 +186,10 @@ func (c *Client) StartClientLoop() {
 
 	for {
 		// Verificar señal de shutdown ANTES de procesar el batch
-		select {
-		case <-c.shutdown_event:
-			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
-			if c.conn != nil {
-				c.conn.Close()
-			}
+		if checkShutdown(c) {
 			return
-		default:
 		}
-
+		// enviar apuestas en batches de 8kb, si una apuesta no entra en el batch, se guarda para el próximo batch
 		bets := []Bet{}
 		packageSize := 0
 		if temp_bet.Name != "" {
@@ -127,42 +200,7 @@ func (c *Client) StartClientLoop() {
 		}
 
 		// Leer líneas del CSV hasta llenar el buffer de 8KB o llegar al EOF
-		for {
-			record, err := reader.Read()
-			if err != nil {
-				if err.Error() == "EOF" {
-					log.Infof("action: read_bets_from_csv | result: success | status: eof_reached | bets_count: %v", len(bets))
-					break
-				}
-				log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
-				return
-			}
-
-			if len(record) < 5 {
-				log.Errorf("CSV file does not contain enough columns")
-				continue
-			}
-
-			bet := Bet{
-				Name:      record[0],
-				Lastname:  record[1],
-				Dni:       record[2],
-				Birthdate: record[3],
-				Number:    record[4],
-			}
-
-			chunkBSize := len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number)
-			bufferSize := 8 * 1024
-
-			if chunkBSize+packageSize >= bufferSize {
-				temp_bet = bet
-				log.Infof("action: read_bets_from_csv | result: in_progress | status: package_full | package_size: %v", packageSize)
-				break
-			} else {
-				packageSize += chunkBSize
-				bets = append(bets, bet)
-			}
-		}
+		readBetsFromCSV(reader, &bets, &packageSize, &temp_bet, c)
 
 		// Si no hay bets y llegamos al EOF, terminar
 		if len(bets) == 0 {
