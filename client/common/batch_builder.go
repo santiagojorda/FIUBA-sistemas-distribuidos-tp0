@@ -45,12 +45,13 @@ func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
 
 	// If we have a leftover bet from previous batch, add it first
 	if b.tempBet != nil {
-		bets = append(bets, *b.tempBet)
-		packageSize = calculateBetSize(b.tempBet)
+		leftoverBet := b.tempBet
+		bets = append(bets, *leftoverBet)
+		packageSize = calculateBetSize(leftoverBet)
 		b.tempBet = nil
 		b.log.Infof(
 			"action: read_bets_from_csv | result: in_progress | bet: %v | package_size: %v",
-			b.tempBet.Name+" "+b.tempBet.Lastname,
+			leftoverBet.Name+" "+leftoverBet.Lastname,
 			packageSize,
 		)
 	}

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 IP_SUBNET="172.25.125.0/24"
-MAX_BATCH_AMOUNT="${MAX_BATCH_AMOUNT:-120}"
 MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-8192}"
 
 if [ "$#" -ne 2 ]; then
@@ -44,7 +43,6 @@ for i in $(seq 1 $AMOUNT_CLIENTS); do
     restart: no
     environment:
       - CLI_ID=$i
-      - CLI_BATCH_MAXAMOUNT=$MAX_BATCH_AMOUNT
       - CLI_BATCH_MAXSIZE=$MAX_BATCH_SIZE
     networks:
       - testing_net

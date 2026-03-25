@@ -43,7 +43,7 @@ func (p *ProtocolHandler) SendBatch(bets []Bet) error {
 		return fmt.Errorf("failed to receive confirmation: %v", err)
 	}
 
-	p.log.Infof("action: batch_enviado | result: success | cantidad: %v", len(bets))
+	p.log.Infof("action: batch_enviado | result: success | cantidad: %v | bytes_enviados: %v", len(bets), len(payload))
 	return nil
 }
 

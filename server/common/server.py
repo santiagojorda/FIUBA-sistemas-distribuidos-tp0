@@ -60,8 +60,7 @@ class Server:
         Then connection created is printed and returned
         """
 
-        # timer de 20 segunods, para que todas las agencias puedan hacer 
-        # el handshake con el servidor
+
         # una vez que el servidor no le llegan mas peticiones,
         # se queda a la escucha de que le lleguen todos las apuestas
         # cada batch de apuesta tiene un delimitador que le indica al servidor
