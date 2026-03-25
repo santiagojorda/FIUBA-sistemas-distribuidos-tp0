@@ -6,6 +6,7 @@ services:
     entrypoint: ["python3", "/server/main.py"]
     environment:
       - PYTHONUNBUFFERED=1
+      - AMOUNT_CLIENTS=5
     networks:
       - testing_net
     volumes:
@@ -17,11 +18,72 @@ services:
     restart: no
     environment:
       - CLI_ID=1
-      - NOMBRE=nombre1
-      - APELLIDO=apellido1
-      - DOCUMENTO=40867051
-      - NACIMIENTO=1990-01-01
-      - NUMERO=123456781
+      - CLI_BATCH_MAXAMOUNT=120
+      - CLI_BATCH_MAXSIZE=8192
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
+  client2:
+    container_name: client2
+    image: client:latest
+    entrypoint: ["/client"]
+    restart: no
+    environment:
+      - CLI_ID=2
+      - CLI_BATCH_MAXAMOUNT=120
+      - CLI_BATCH_MAXSIZE=8192
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
+  client3:
+    container_name: client3
+    image: client:latest
+    entrypoint: ["/client"]
+    restart: no
+    environment:
+      - CLI_ID=3
+      - CLI_BATCH_MAXAMOUNT=120
+      - CLI_BATCH_MAXSIZE=8192
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
+  client4:
+    container_name: client4
+    image: client:latest
+    entrypoint: ["/client"]
+    restart: no
+    environment:
+      - CLI_ID=4
+      - CLI_BATCH_MAXAMOUNT=120
+      - CLI_BATCH_MAXSIZE=8192
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
+  client5:
+    container_name: client5
+    image: client:latest
+    entrypoint: ["/client"]
+    restart: no
+    environment:
+      - CLI_ID=5
+      - CLI_BATCH_MAXAMOUNT=120
+      - CLI_BATCH_MAXSIZE=8192
     networks:
       - testing_net
     depends_on:

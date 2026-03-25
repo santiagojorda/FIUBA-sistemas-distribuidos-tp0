@@ -1,254 +1,158 @@
 package common
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
-	"encoding/csv"
-	"strings"
 
 	"github.com/op/go-logging"
 )
 
-const CANTIDAD_CAMPOS_BETS = 5
-const BUFFER_SIZE = 8 * 1024
-const SOCKET_CONNECTION_MAX_RETRIES = 5
-
-var log = logging.MustGetLogger("log")
-var builder strings.Builder
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	MaxBatchAmount int
+	ID              string
+	ServerAddress   string
+	MaxBatchAmount  int
+	MaxBatchSize    int
+	Log 					  *logging.Logger
 }
 
-// Client Entity that encapsulates how
+// Client orchestrates the communication with the server
 type Client struct {
 	config          ClientConfig
-	conn            net.Conn
-	reader          *bufio.Reader
-	shutdown_event  chan os.Signal	
-	maxBatchAmount  int
+	connection      *Connection
+	batchBuilder    *BatchBuilder
+	protocolHandler *ProtocolHandler
+	shutdownEvent   chan os.Signal
+	log						 *logging.Logger
 }
 
-// NewClient Initializes a clientnew client receiving the configuration
-// as a parameter
+// NewClient initializes the client with dependencies
 func NewClient(config ClientConfig) *Client {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
-	client := &Client{
-		config:         config,
-		shutdown_event: signalChan,
-    maxBatchAmount: config.MaxBatchAmount,
-	}
 
-
-	return client
-}
-
-// CreateClientSocket Initializes client socket. In case of
-// failure, error is printed in stdout/stderr and exit 1
-// is returned
-func (c *Client) createClientSocket() error {
-	maxRetries := SOCKET_CONNECTION_MAX_RETRIES
-	retryDelay := time.Second
-	
-
-	// Intentar conectar al servidor con tcp con reintentos 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		conn, err := net.Dial("tcp", c.config.ServerAddress)
-		if err == nil {
-			c.conn = conn
-			c.reader = bufio.NewReader(conn)
-				log.Infof(
-					"action: connect | result: success | client_id: %v | attempt: %v/%v",
-					c.config.ID,
-					attempt,
-					maxRetries,
-				)
-			return nil
-		}
-		
-		if attempt < maxRetries {
-			log.Infof(
-				"action: connect | result: in_progress | client_id: %v | attempt: %v/%v | error: %v",
-				c.config.ID,
-				attempt,
-				maxRetries,
-				err,
-			)
-			time.Sleep(retryDelay)
-		} else {
-			log.Criticalf(
-				"action: connect | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return err
-		}
-	}
-	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
-}
-
-func checkShutdown(c *Client) bool {
-	select {
-	case <-c.shutdown_event:
-		log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
-		if c.conn != nil {
-			c.conn.Close()
-			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v | connection_closed: true", c.config.ID)
-		}
-		return true
-	default:
-		return false
+	return &Client{
+		config:        config,
+		shutdownEvent: signalChan,
+		log:           config.Log,
 	}
 }
 
-func readBetsFromCSV(reader *csv.Reader, bets *[]Bet, packageSize *int, temp_bet *Bet, c *Client) {
-	for {
+// Start initializes connection and starts the client loop
+func (c *Client) Start() error {
+	// Initialize connection component
+	c.connection = NewConnection(
+		c.config.ID,
+		c.config.ServerAddress,
+		c.log,
+	)
 
-		if len(*bets) >= c.maxBatchAmount {
-			log.Infof("action: read_bets_from_csv | result: in_progress | status: batch_limit_reached | bets_count: %v", len(*bets))
-			break
-		}
-
-
-		record, err := reader.Read()
-		if err != nil {
-			if err.Error() == "EOF" {
-				log.Infof("action: read_bets_from_csv | result: success | status: eof_reached | bets_count: %v", len(*bets))
-				break
-			}
-			log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
-			return
-		}
-
-		if len(record) < CANTIDAD_CAMPOS_BETS {
-			log.Errorf("CSV file does not contain enough columns")
-			continue
-		}
-
-		bet := Bet{
-			Name:      record[0],
-			Lastname:  record[1],
-			Dni:       record[2],
-			Birthdate: record[3],
-			Number:    record[4],
-		}
-
-		chunkBSize := len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number)
-		bufferSize := BUFFER_SIZE
-
-		if chunkBSize+*packageSize >= bufferSize {
-			*temp_bet = bet
-			log.Infof("action: read_bets_from_csv | result: in_progress | status: package_full | package_size: %v", packageSize)
-			break
-		} else {
-			*packageSize += chunkBSize
-			*bets = append(*bets, bet)
-		}
+	// Connect to server
+	if err := c.connection.Connect(); err != nil {
+		c.log.Errorf("action: create_client_socket | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return err
 	}
+
+	// Initialize batch builder
+	csvPath := fmt.Sprintf(".data/agency-%s.csv", c.config.ID)
+	batchBuilder, err := NewBatchBuilder(
+		csvPath,
+		c.config.MaxBatchSize,
+		c.config.MaxBatchAmount,
+		c.config.ID,
+		c.log,
+	)
+	if err != nil {
+		return err
+	}
+	c.batchBuilder = batchBuilder
+
+	// Initialize protocol handler
+	c.protocolHandler = NewProtocolHandler(c.connection, c.log)
+
+	return nil
 }
 
-// StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop() {
-	// Crear el socket del cliente
-	if err := c.createClientSocket(); err != nil {
-		log.Errorf("action: create_client_socket | result: fail | client_id: %v | error: %v",
+// Run executes the main client loop
+func (c *Client) Run() {
+	if err := c.Start(); err != nil {
+		return
+	}
+
+	defer c.closeResources()
+
+	// Send agency ID
+	if err := c.connection.SendAgency(c.config.ID); err != nil {
+		c.log.Errorf("action: send_agency | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
 		return
 	}
 
-	// Enviar el mensaje del id de agencia al servidor
-	fmt.Fprintf(c.conn, "%s\n", c.config.ID)
+	// Process batches
+	c.processBatches()
 
+	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
 
-	// Abrir el archivo CSV correspondiente a la agencia
-	file, err := os.Open(fmt.Sprintf(".data/agency-%s.csv", c.config.ID))
-	if err != nil {
-		log.Errorf("action: open_file | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	temp_bet := Bet{}
-
+// processBatches reads batches from CSV and sends them to server
+func (c *Client) processBatches() {
 	for {
-		// Verificar señal de shutdown ANTES de procesar el batch
-		if checkShutdown(c) {
+		// Check for shutdown signal
+		if c.isShutdownRequested() {
 			return
 		}
-		// enviar apuestas en batches de 8kb, si una apuesta no entra en el batch, se guarda para el próximo batch
-		bets := []Bet{}
-		packageSize := 0
-		if temp_bet.Name != "" {
-			bets = append(bets, temp_bet)
-			packageSize += len(temp_bet.Name) + len(temp_bet.Lastname) + len(temp_bet.Dni) + len(temp_bet.Birthdate) + len(temp_bet.Number)
-			temp_bet = Bet{}
-			log.Infof("action: read_bets_from_csv | result: in_progress | bet: %v | package_size: %v", bets[0].Name+" "+bets[0].Lastname, packageSize)
+
+		// Read next batch
+		bets, hasMore, err := c.batchBuilder.NextBatch()
+		if err != nil {
+			c.log.Errorf("action: read_bets_from_csv | result: fail | error: %v", err)
+			return
 		}
 
-		// Leer líneas del CSV hasta llenar el buffer de 8KB o llegar al EOF
-		readBetsFromCSV(reader, &bets, &packageSize, &temp_bet, c)
-
-		// Si no hay bets y llegamos al EOF, terminar
+		// If no bets, we're done
 		if len(bets) == 0 {
-			log.Infof("action: read_bets_from_csv | result: success | status: no_more_bets")
 			break
 		}
 
-		// Construir el batch: cantidad + datos delimitados por |
-		var batchData bytes.Buffer
-		batchData.WriteString(strconv.Itoa(len(bets)))
-		batchData.WriteString("\n")
-
-		for _, bet := range bets {
-			batchData.WriteString(bet.Name)
-			batchData.WriteString("|")
-			batchData.WriteString(bet.Lastname)
-			batchData.WriteString("|")
-			batchData.WriteString(bet.Dni)
-			batchData.WriteString("|")
-			batchData.WriteString(bet.Birthdate)
-			batchData.WriteString("|")
-			batchData.WriteString(bet.Number)
-			batchData.WriteString("\n")
-		}
-
-		// Enviar el batch
-		payload := batchData.Bytes()
-		escritos := 0
-
-		for escritos < len(payload) {
-				n, err := c.conn.Write(payload[escritos:])
-				escritos += n 
-				
-				if err != nil {
-						log.Errorf("action: send_batch | result: fail | error: %v", err)
-						return
-				}
-		}
-
-		// Esperar confirmación del servidor
-		confirmation, err := readLine(c.reader)
-		if err != nil || confirmation == "" {
-			log.Errorf("action: receive_confirmation | result: fail | error: %v", err)
+		// Send batch to server
+		if err := c.protocolHandler.SendBatch(bets); err != nil {
+			c.log.Errorf("action: send_batch | result: fail | error: %v", err)
 			return
 		}
 
-		log.Infof("action: batch_enviado | result: success | cantidad: %v", len(bets))
+		// If no more batches, exit loop
+		if !hasMore {
+			break
+		}
 	}
-
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
+
+// isShutdownRequested checks if shutdown signal was received
+func (c *Client) isShutdownRequested() bool {
+	select {
+	case <-c.shutdownEvent:
+		c.log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+		return true
+	default:
+		return false
+	}
+}
+
+// closeResources closes all resources gracefully
+func (c *Client) closeResources() {
+	if c.connection != nil && c.connection.IsConnected() {
+		c.connection.Close()
+	}
+	if c.batchBuilder != nil {
+		c.batchBuilder.Close()
+	}
+}
+

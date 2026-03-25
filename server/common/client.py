@@ -1,6 +1,5 @@
 
 import json
-import socket
 
 BUFFER = 1024
 DECODE = 'utf-8'

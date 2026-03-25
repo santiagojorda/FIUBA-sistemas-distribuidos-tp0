@@ -35,6 +35,11 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop.amount")
 	v.BindEnv("log.level")
 	v.BindEnv("batch.maxAmount")
+	v.BindEnv("batch.maxSize")
+
+	// Defaults used when neither config file nor env var defines the value.
+	v.SetDefault("batch.maxAmount", 120)
+	v.SetDefault("batch.maxSize", 8192)
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -73,13 +78,12 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s  | log_level: %s | loop_amount: %s | loop_period: %s | batch_max_amount: %s",
+	log.Infof("action: config | result: success | client_id: %s | server_address: %s | log_level: %s | batch_max_amount: %s | batch_max_size: %s",
 		v.GetString("id"),
 		v.GetString("server.address"),
 		v.GetString("log.level"),
-		v.GetString("loop.amount"),
-		v.GetString("loop.period"),
 		v.GetString("batch.maxAmount"),
+		v.GetString("batch.maxSize"),
 	)
 }
 
@@ -101,11 +105,13 @@ func main() {
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
+		ServerAddress:  v.GetString("server.address"),
+		ID:             v.GetString("id"),
 		MaxBatchAmount: v.GetInt("batch.maxAmount"),
+		MaxBatchSize:   v.GetInt("batch.maxSize"),
+		Log:						log,
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	client.Run()
 }
