@@ -7,14 +7,19 @@ from .client import Client
 from .client_handler import ClientHandler
 
 class Server:
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, amount_clients):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._server_socket.settimeout(1.0)
         self._clients = []
+        self._client_threads = []
         self._shutdown_event = threading.Event()
+        self._amount_clients = amount_clients
+        self._finished_agencies = set()
+        self._finish_condition = threading.Condition()
+        self._sorteo_logged = False
         signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
 
     def __handle_graceful_shutdown(self, signum, frame):
@@ -35,6 +40,10 @@ class Server:
             if client_sock is None:
                 continue
             self.__handle_client_connection(client_sock)
+
+        for thread in list(self._client_threads):
+            thread.join()
+
         try:
             self._server_socket.close()
         except OSError:
@@ -49,8 +58,28 @@ class Server:
         logging.info('action: graceful_shutdown | result: success')
 
     def __handle_client_connection(self, client):
-        handler = ClientHandler(client)
-        handler.handle()
+        handler = ClientHandler(
+            client,
+            self._register_finished_agency,
+            self._wait_for_all_finished,
+        )
+        thread = threading.Thread(target=handler.handle)
+        thread.start()
+        self._client_threads.append(thread)
+
+    def _register_finished_agency(self, agency):
+        with self._finish_condition:
+            self._finished_agencies.add(agency)
+            if len(self._finished_agencies) >= self._amount_clients:
+                if not self._sorteo_logged:
+                    logging.info('action: sorteo | result: success')
+                    self._sorteo_logged = True
+                self._finish_condition.notify_all()
+
+    def _wait_for_all_finished(self):
+        with self._finish_condition:
+            while len(self._finished_agencies) < self._amount_clients and not self._shutdown_event.is_set():
+                self._finish_condition.wait(timeout=1.0)
 
     def __accept_new_connection(self):
         """

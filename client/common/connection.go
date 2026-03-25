@@ -114,6 +114,16 @@ func (c *Connection) ReceiveConfirmation() (string, error) {
 	return c.ReceiveLine()
 }
 
+// SendFinished sends the finalization message to server.
+func (c *Connection) SendFinished() error {
+	return c.Send([]byte("FIN\n"))
+}
+
+// ReceiveFinishedConfirmation waits for server confirmation once all clients finished.
+func (c *Connection) ReceiveFinishedConfirmation() (string, error) {
+	return c.ReceiveLine()
+}
+
 // Close closes the connection gracefully
 func (c *Connection) Close() error {
 	if c.conn != nil {

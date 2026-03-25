@@ -15,6 +15,7 @@ def load_server_config() -> dict:
             os.getenv("SERVER_LISTEN_BACKLOG", config["DEFAULT"]["SERVER_LISTEN_BACKLOG"])
         )
         config_params["logging_level"] = os.getenv("LOGGING_LEVEL", config["DEFAULT"]["LOGGING_LEVEL"])
+        config_params["amount_clients"] = int(os.getenv("AMOUNT_CLIENTS", "1"))
     except KeyError as e:
         raise KeyError(f"Key was not found. Error: {e}. Aborting server")
     except ValueError as e:

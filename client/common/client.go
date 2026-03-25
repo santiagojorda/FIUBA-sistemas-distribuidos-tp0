@@ -99,6 +99,24 @@ func (c *Client) Run() {
 	// Process batches
 	c.processBatches()
 
+	if err := c.connection.SendFinished(); err != nil {
+		c.log.Errorf("action: send_finish | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	finishConfirmation, err := c.connection.ReceiveFinishedConfirmation()
+	if err != nil || finishConfirmation == "" {
+		c.log.Errorf("action: receive_finish_confirmation | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+	c.log.Infof("action: send_finish | result: success | client_id: %v", c.config.ID)
+
 	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
 

@@ -5,8 +5,10 @@ from .utils import store_bets
 
 
 class ClientHandler:
-    def __init__(self, client):
+    def __init__(self, client, on_finished, wait_for_all_finished):
         self._client = client
+        self._on_finished = on_finished
+        self._wait_for_all_finished = wait_for_all_finished
 
     def handle(self):
         """
@@ -32,6 +34,15 @@ class ClientHandler:
 
                 if count_msg.strip() == '':
                     continue
+
+                if count_msg.strip().upper() == 'FIN':
+                    logging.info(
+                        f'action: receive_message | result: success | ip: {self._client._ip} | agency: {agency} | msg: FIN'
+                    )
+                    self._on_finished(agency)
+                    self._wait_for_all_finished()
+                    self._client.send('ok\n')
+                    break
 
                 batch_count = parse_batch_count(count_msg)
                 bets = []

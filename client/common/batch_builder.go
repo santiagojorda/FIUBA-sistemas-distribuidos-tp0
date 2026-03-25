@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/csv"
 	"os"
+	"strconv"
 
 	"github.com/op/go-logging"
 )
@@ -41,7 +42,7 @@ func NewBatchBuilder(csvPath string, maxBatchSize, maxBatchAmount int, clientID 
 // Returns ([]Bet, hasMore, error)
 func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
 	bets := []Bet{}
-	packageSize := 0
+	packageSize := 0 // Sum of serialized bet lines (without count line)
 
 	// If we have a leftover bet from previous batch, add it first
 	if b.tempBet != nil {
@@ -94,13 +95,14 @@ func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
 		}
 
 		betSize := calculateBetSize(&bet)
+		projectedSize := packageSize + betSize + batchCountLineSize(len(bets)+1)
 
 		// Check if adding this bet would exceed buffer size
-		if packageSize+betSize >= b.maxBatchSize {
+		if projectedSize > b.maxBatchSize {
 			b.tempBet = &bet // Save for next batch
 			b.log.Infof(
 				"action: read_bets_from_csv | result: in_progress | status: package_full | package_size: %v",
-				packageSize,
+				packageSize+batchCountLineSize(len(bets)),
 			)
 			return bets, true, nil // More batches to come
 		}
@@ -118,7 +120,13 @@ func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
 
 // calculateBetSize returns the size in bytes of a bet's data
 func calculateBetSize(bet *Bet) int {
-	return len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number)
+	// name|lastname|dni|birthdate|number\n
+	return len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number) + 4 + 1
+}
+
+func batchCountLineSize(count int) int {
+	// <count>\n
+	return len(strconv.Itoa(count)) + 1
 }
 
 // Close closes the underlying file
