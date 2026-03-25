@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/op/go-logging"
@@ -116,6 +117,29 @@ func (c *Client) Run() {
 		return
 	}
 	c.log.Infof("action: send_finish | result: success | client_id: %v", c.config.ID)
+
+	if err := c.connection.SendWinnersQuery(); err != nil {
+		c.log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	winnersResponse, err := c.connection.ReceiveWinnersResponse()
+	if err != nil {
+		c.log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	winnersCount := 0
+	if winnersResponse != "" && strings.ToUpper(winnersResponse) != "NONE" {
+		winnersCount = len(strings.Split(winnersResponse, "|"))
+	}
+	c.log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winnersCount)
 
 	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }

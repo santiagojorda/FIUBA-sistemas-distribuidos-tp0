@@ -124,6 +124,16 @@ func (c *Connection) ReceiveFinishedConfirmation() (string, error) {
 	return c.ReceiveLine()
 }
 
+// SendWinnersQuery asks server for winners list for this agency.
+func (c *Connection) SendWinnersQuery() error {
+	return c.Send([]byte("WINNERS\n"))
+}
+
+// ReceiveWinnersResponse reads winners list payload from server.
+func (c *Connection) ReceiveWinnersResponse() (string, error) {
+	return c.ReceiveLine()
+}
+
 // Close closes the connection gracefully
 func (c *Connection) Close() error {
 	if c.conn != nil {

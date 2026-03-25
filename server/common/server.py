@@ -5,6 +5,7 @@ import threading
 
 from .client import Client
 from .client_handler import ClientHandler
+from .utils import store_bets
 
 class Server:
     def __init__(self, port, listen_backlog, amount_clients):
@@ -19,6 +20,8 @@ class Server:
         self._amount_clients = amount_clients
         self._finished_agencies = set()
         self._finish_condition = threading.Condition()
+        self._bets_lock = threading.Lock()
+        self._pending_bets = []
         self._sorteo_logged = False
         signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
 
@@ -60,6 +63,7 @@ class Server:
     def __handle_client_connection(self, client):
         handler = ClientHandler(
             client,
+            self._submit_bets,
             self._register_finished_agency,
             self._wait_for_all_finished,
         )
@@ -67,11 +71,27 @@ class Server:
         thread.start()
         self._client_threads.append(thread)
 
+    def _submit_bets(self, bets):
+        with self._bets_lock:
+            self._pending_bets.extend(bets)
+
+    def _flush_pending_bets(self):
+        with self._bets_lock:
+            if not self._pending_bets:
+                return
+            bets_to_store = list(self._pending_bets)
+            self._pending_bets.clear()
+        store_bets(bets_to_store)
+        logging.info(
+            f'action: apuesta_almacenada | result: success | cantidad: {len(bets_to_store)}'
+        )
+
     def _register_finished_agency(self, agency):
         with self._finish_condition:
             self._finished_agencies.add(agency)
             if len(self._finished_agencies) >= self._amount_clients:
                 if not self._sorteo_logged:
+                    self._flush_pending_bets()
                     logging.info('action: sorteo | result: success')
                     self._sorteo_logged = True
                 self._finish_condition.notify_all()

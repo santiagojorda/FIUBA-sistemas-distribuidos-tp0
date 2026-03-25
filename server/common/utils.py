@@ -35,3 +35,11 @@ def load_bets() -> Iterator[Bet]:
         for row in reader:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
+
+def winner_documents_by_agency(agency: int) -> list[str]:
+    winners: list[str] = []
+    for bet in load_bets():
+        if bet.agency == int(agency) and has_won(bet):
+            winners.append(str(bet.document))
+    return winners
+
