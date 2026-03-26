@@ -3,7 +3,6 @@ package common
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/op/go-logging"
