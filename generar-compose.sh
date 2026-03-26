@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 IP_SUBNET="172.25.125.0/24"
+MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-8192}"
 
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 <OUTPUT_FILE> <AMOUNT_CLIENTS>"
@@ -42,17 +43,14 @@ for i in $(seq 1 $AMOUNT_CLIENTS); do
     restart: no
     environment:
       - CLI_ID=$i
-      - NOMBRE=nombre$i
-      - APELLIDO=apellido$i
-      - DOCUMENTO=4086705$i
-      - NACIMIENTO=1990-01-0$i
-      - NUMERO=12345678$i
+      - CLI_BATCH_MAXSIZE=$MAX_BATCH_SIZE
     networks:
       - testing_net
     depends_on:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data:/.data:ro
 EOL
 
 done

@@ -1,31 +1,27 @@
-### Ejercicio N°5:
->Modificar la lógica de negocio tanto de los clientes como del servidor para nuestro nuevo caso de uso.
+## Ejercicio N°6:
+>Modificar los clientes para que envíen varias apuestas a la vez (modalidad conocida como procesamiento por _chunks_ o _batchs_). 
+>Los _batchs_ permiten que el cliente registre varias apuestas en una misma consulta, acortando tiempos de transmisión y procesamiento.
 >
->#### Cliente
->Emulará a una _agencia de quiniela_ que participa del proyecto. Existen 5 agencias. Deberán recibir como variables de entorno los campos que representan la apuesta de una persona: nombre, apellido, DNI, nacimiento, numero apostado (en adelante 'número'). Ej.: `NOMBRE=Santiago Lionel`, `APELLIDO=Lorca`, `DOCUMENTO=30904465`, `NACIMIENTO=1999-03-17` y `NUMERO=7574` respectivamente.
+>La información de cada agencia será simulada por la ingesta de su archivo numerado correspondiente, provisto por la cátedra dentro de `.data/datasets.zip`.
+>Los archivos deberán ser inyectados en los containers correspondientes y persistido por fuera de la imagen (hint: `docker volumes`), manteniendo la convencion de que el cliente N utilizara el archivo de apuestas `.data/agency-{N}.csv` .
 >
->Los campos deben enviarse al servidor para dejar registro de la apuesta. Al recibir la confirmación del servidor se debe imprimir por log: `action: apuesta_enviada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
+>En el servidor, si todas las apuestas del *batch* fueron procesadas correctamente, imprimir por log: `action: apuesta_recibida | result: success | cantidad: ${CANTIDAD_DE_APUESTAS}`. En caso de detectar un error con alguna de las apuestas, debe responder con un código de error a elección e imprimir: `action: apuesta_recibida | result: fail | cantidad: ${CANTIDAD_DE_APUESTAS}`.
 >
+>La cantidad máxima de apuestas dentro de cada _batch_ debe ser configurable desde config.yaml. Respetar la clave `batch: maxAmount`, pero modificar el valor por defecto de modo tal que los paquetes no excedan los 8kB. 
 >
->
->#### Servidor
->Emulará a la _central de Lotería Nacional_. Deberá recibir los campos de la cada apuesta desde los clientes y almacenar la información mediante la función `store_bet(...)` para control futuro de ganadores. La función `store_bet(...)` es provista por la cátedra y no podrá ser modificada por el alumno.
-> Al persistir se debe imprimir por log: `action: apuesta_almacenada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
->
-> #### Comunicación:
-> Se deberá implementar un módulo de comunicación entre el cliente y el servidor donde se maneje el envío y la recepción de los paquetes, el cual se espera que contemple:
-> * Definición de un protocolo para el envío de los mensajes.
-  * Serialización de los datos.
-  * Correcta separación de responsabilidades entre modelo de dominio y capa de comunicación.
-  * Correcto empleo de sockets, incluyendo manejo de errores y evitando los fenómenos conocidos como [_short read y short write_](https://cs61.seas.harvard.edu/site/2018/FileDescriptors/).
+>Por su parte, el servidor deberá responder con éxito solamente si todas las apuestas del _batch_ fueron procesadas correctamente.
 
 ---
 
-### Solucion:
-Lo que hice fue crear un protocolo de comunicación entre el cliente y el servidor, el cual se encarga de serializar y deserializar los datos que se envían entre ambos. Para esto, utilice el formato PipeDelimited, el cual es un formato de texto plano que utiliza el carácter "|" como separador entre los campos. De esta manera, el cliente envia un mensaje al servidor con la información de la apuesta, y el servidor recibe ese mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`. 
+## Solucion:
 
-Por consigna, cada cliente recibe los datos de una  apuesta por variable de entorno, este se encarga de serializarlo y enviarlo al servidor.
+Variable de entorno para clientes donde se define la cantidad máxima de apuestas por batch:
+```bash
+MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-8192}"
+```
 
-El cliente envia un primer mensaje con su ID al servidor para realizar el registro. Luego envia la apuesta en formato 
-`${NOMBRE}|${APELLIDO}|${DOCUMENTO}|${NACIMIENTO}|${NUMERO}\n`
-y por ultimo envia un mensaje de `FIN\n` para indicar que no se enviaran mas apuestas. El servidor recibe cada mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`.
+
+Agrego los archivos de apuestas, montando un volumen en cada cliente
+```
+  - ./.data:/.data:ro
+```

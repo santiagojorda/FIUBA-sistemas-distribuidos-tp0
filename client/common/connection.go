@@ -85,24 +85,8 @@ func (c *Connection) Send(data []byte) error {
 	return nil
 }
 
-// SendAgency sends agency ID to server
-func (c *Connection) SendAgency(agencyID string) error {
-	message := fmt.Sprintf("%s\n", agencyID)
-	return c.Send([]byte(message))
-}
-
-// SendMessage writes a message to the active socket connection.
-func (c *Connection) SendMessage(msg string) error {
-	if c.conn == nil {
-		return fmt.Errorf("connection is not established")
-	}
-
-	_, err := fmt.Fprint(c.conn, msg)
-	return err
-}
-
-// ReadLine reads a newline-terminated response from the server.
-func (c *Connection) ReadLine() (string, error) {
+// Receive reads a newline-terminated message from the server.
+func (c *Connection) Receive() (string, error) {
 	if c.reader == nil {
 		return "", fmt.Errorf("connection reader is not initialized")
 	}

@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 
@@ -35,12 +34,8 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("server.address")
 	v.BindEnv("loop.period")
 
-	// Add env variables for player information
-	v.BindEnv("NOMBRE", "NOMBRE")
-	v.BindEnv("APELLIDO", "APELLIDO")
-	v.BindEnv("DOCUMENTO", "DOCUMENTO")
-	v.BindEnv("NACIMIENTO", "NACIMIENTO")
-	v.BindEnv("NUMERO", "NUMERO")
+	v.BindEnv("batch.maxAmount")
+	v.BindEnv("batch.maxSize")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -79,10 +74,12 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s  | log_level: %s",
+	log.Infof("action: config | result: success | client_id: %s | server_address: %s | log_level: %s | batch_max_amount: %d | batch_max_size: %d",
 		v.GetString("id"),
 		v.GetString("server.address"),
 		v.GetString("log.level"),
+		v.GetInt("batch.maxAmount"),
+		v.GetInt("batch.maxSize"),
 	)
 }
 
@@ -99,19 +96,13 @@ func main() {
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
+		ServerAddress:  v.GetString("server.address"),
+		ID:             v.GetString("id"),
+		MaxBatchAmount: v.GetInt("batch.maxAmount"),
+		MaxBatchSize:   v.GetInt("batch.maxSize"),
+		Log:            log,
 	}
 
-	bet := common.Bet{
-		Name:      v.GetString("NOMBRE"),
-		Lastname:  v.GetString("APELLIDO"),
-		Dni:       v.GetString("DOCUMENTO"),
-		Birthdate: v.GetString("NACIMIENTO"),
-		Number:    v.GetString("NUMERO"),
-	}
-
-	bets := []common.Bet{bet}
-	client := common.NewClient(clientConfig, bets)
+	client := common.NewClient(clientConfig)
 	client.Run()
 }
