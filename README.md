@@ -25,13 +25,14 @@ Agrego los archivos de apuestas, montando un volumen en cada cliente
 ```bash
   - ./.data:/.data:ro
 ```
-El protocolo de comunicación entre cliente y servidor se modificó para enviar y recibir batchs de apuestas, en lugar de apuestas individuales. El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente.
+El protocolo de comunicación entre cliente y servidor se modificó para enviar y recibir batchs de apuestas, en lugar de apuestas individuales
 
 Para modularizar, cree un `batch_builder` que se encarga de leer el archivo de apuestas y construir los batchs a enviar al servidor, respetando la cantidad máxima de apuestas por batch definida en laS variableS de entorno `MAX_BATCH_AMOUNT` y en el tamaño del `MAX_BATCH_SIZE` que es de 8KB.
 
 todas las apuestas estan separadas por un salto de linea.
 
+Cuando se envia por completo un batch el cliente envia un mensaje `END_BATCH` y el servidor le responde con un mensaje de `OK` o `ERROR` dependiendo del resultado del procesamiento del batch.
+
 Si se leyo una apuesta pero el batch se lleno, se envia el batch al servidor y se comienza a construir un nuevo batch con la apuesta leida para luego ser enviado al servidor.
 
-El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente. En caso de detectar un error con alguna de las apuestas, responde con un código de error y registra el fallo en el log.
-
+El servidor imprime por log el resultado del procesamiento de cada batch, indicando la cantidad de apuestas procesadas y si el resultado fue exitoso o fallido.
