@@ -33,31 +33,25 @@ class ClientHandler:
             agency_id = self.get_agency_id()
 
             while True:
-                count_msg = self._client.receive_message()
-                if count_msg is None:
+                msg = self._client.receive_message()
+                if msg is None:
                     break
 
-                count_msg = count_msg.strip()
+                msg = msg.strip()
 
-                if count_msg == '':
+                if msg == '':
                     continue
 
-                if count_msg.upper() == MESSAGE_FIN:
-                    logging.info(
-                        f'action: receive_message | result: success | ip: {self._client._ip} | msg: {MESSAGE_FIN}'
-                    )
+                if msg.upper() == MESSAGE_FIN:
+                    logging.info(f'action: receive_message | result: success | ip: {self._client._ip} | msg: {MESSAGE_FIN}')
                     break
 
-                bet = parse_bet_line(count_msg, agency_id)
+                bet = parse_bet_line(msg, agency_id)
                 store_bets([bet])
-                logging.info(
-                    f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}'
-                )
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
                 self._client.send('ok\n')
         except (OSError, ValueError, KeyError) as e:
-            logging.error(
-                f'action: receive_message | result: fail | ip: {self._client._ip} | error: {e}'
-            )
+            logging.error(f'action: receive_message | result: fail | ip: {self._client._ip} | error: {e}')
         finally:
             try:
                 self._client.close()

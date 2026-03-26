@@ -43,7 +43,6 @@ class Client:
 
             chunk = self.sock.recv(BUFFER)
             if not chunk:
-                # Si la conexión se cerró pero queda contenido parcial, devolverlo.
                 if self._recv_buffer:
                     line = self._recv_buffer
                     self._recv_buffer = b''

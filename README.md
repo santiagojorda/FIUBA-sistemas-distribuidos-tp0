@@ -22,3 +22,10 @@
 ---
 
 ### Solucion:
+Lo que hice fue crear un protocolo de comunicación entre el cliente y el servidor, el cual se encarga de serializar y deserializar los datos que se envían entre ambos. Para esto, utilice el formato PipeDelimited, el cual es un formato de texto plano que utiliza el carácter "|" como separador entre los campos. De esta manera, el cliente envia un mensaje al servidor con la información de la apuesta, y el servidor recibe ese mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`. 
+
+Por consigna, cada cliente recibe los datos de una  apuesta por variable de entorno, este se encarga de serializarlo y enviarlo al servidor.
+
+El cliente envia un primer mensaje con su ID al servidor para realizar el registro. Luego envia la apuesta en formato 
+`${NOMBRE}|${APELLIDO}|${DOCUMENTO}|${NACIMIENTO}|${NUMERO}\n`
+y por ultimo envia un mensaje de `FIN\n` para indicar que no se enviaran mas apuestas. El servidor recibe cada mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`.
