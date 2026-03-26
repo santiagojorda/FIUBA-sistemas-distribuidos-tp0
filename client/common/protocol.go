@@ -1,21 +1,52 @@
 package common
 
-import "encoding/json"
+import (
+	"bytes"
+	"fmt"
+	"strconv"
 
-func serializePlayer(player Player) ([]byte, error) {
-	protocolMsg := ProtocolMessage{
-		Name:      player.Name,
-		Lastname:  player.Lastname,
-		Dni:       player.Dni,
-		Birthdate: player.Birthdate,
-		Number:    player.Number,
+	"github.com/op/go-logging"
+)
+
+const AMOUNTS_BETS_PER_MESSAGE = 1
+
+// ProtocolHandler manages serialization and sending of bets batches
+type ProtocolHandler struct {
+	connection *Connection
+	log			   *logging.Logger
+}
+
+// NewProtocolHandler creates a new ProtocolHandler instance
+func NewProtocolHandler(connection *Connection, log *logging.Logger) *ProtocolHandler {
+	return &ProtocolHandler{
+		connection: connection,
+		log: log,
 	}
+}
 
-	jsonData, err := json.Marshal(protocolMsg)
-	if err != nil {
-		return nil, err
+// serialize formats the batch data according to protocol
+// Format: <name|lastname|dni|birthdate|number>\n for each bet
+// an the last line contains 'FIN' to indicate the end of the batch
+func (p *ProtocolHandler) serialize(bet Bet) []byte {
+	var buffer bytes.Buffer
+
+	for _, bet := range []Bet{bet} {
+		p.formatBet(&buffer, bet)
+		buffer.WriteString("\n")
 	}
+	buffer.WriteString("FIN")
+	return buffer.Bytes()
+}
 
-	log.Infof("action: serialize_player | result: success | client_id: %v | player: %v", player.Dni, player.Name + " " + player.Lastname)
-	return jsonData, nil
+// formatBet writes a single bet in pipe-delimited format
+func (p *ProtocolHandler) formatBet(buffer *bytes.Buffer, bet Bet) {
+	buffer.WriteString(bet.Name)
+	buffer.WriteString("|")
+	buffer.WriteString(bet.Lastname)
+	buffer.WriteString("|")
+	buffer.WriteString(bet.Dni)
+	buffer.WriteString("|")
+	buffer.WriteString(bet.Birthdate)
+	buffer.WriteString("|")
+	buffer.WriteString(bet.Number)
 }

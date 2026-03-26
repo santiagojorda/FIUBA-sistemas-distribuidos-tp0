@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 
@@ -85,17 +86,6 @@ func PrintConfig(v *viper.Viper) {
 	)
 }
 
-func PrintPlayer(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | player_name: %s | player_lastname: %s | player_dni: %s | player_birthdate: %s | player_number: %s",
-		v.GetString("id"),
-		v.GetString("NOMBRE"),
-		v.GetString("APELLIDO"),
-		v.GetString("DOCUMENTO"),
-		v.GetString("NACIMIENTO"),
-		v.GetString("NUMERO"),
-	)
-}
-
 func main() {
 	v, err := InitConfig()
 	if err != nil {
@@ -106,16 +96,14 @@ func main() {
 		log.Criticalf("%s", err)
 	}
 
-	// Print program config with debugging purposes
 	PrintConfig(v)
-	PrintPlayer(v)
 
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
 	}
 
-	player := common.Player{
+	bet := common.Bet{
 		Name:      v.GetString("NOMBRE"),
 		Lastname:  v.GetString("APELLIDO"),
 		Dni:       v.GetString("DOCUMENTO"),
@@ -123,6 +111,7 @@ func main() {
 		Number:    v.GetString("NUMERO"),
 	}
 
-	client := common.NewClient(clientConfig, player)
-	client.StartClientLoop()
+	bets := []common.Bet{bet}
+	client := common.NewClient(clientConfig, bets)
+	client.Run()
 }

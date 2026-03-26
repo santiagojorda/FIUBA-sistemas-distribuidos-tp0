@@ -1,9 +1,7 @@
 package common
 
 import (
-	"bufio"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,126 +16,90 @@ var log = logging.MustGetLogger("log")
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
+	LoopAmount    int
+	LoopPeriod    time.Duration
 }
 
 // Client Entity that encapsulates how
 type Client struct {
 	config          ClientConfig
-	conn            net.Conn
-	reader          *bufio.Reader
+	connection      *Connection
 	shutdown_event  chan os.Signal
-	players         []Player
+	Log						  *logging.Logger
+  bets						[]Bet
 }
 
-// NewClient Initializes a clientnew client receiving the configuration
+// NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig, player Player) *Client {
+func NewClient(config ClientConfig, bets []Bet) *Client {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
 	client := &Client{
 		config:         config,
 		shutdown_event: signalChan,
+		Log:            log,
+		bets:           bets,
 	}
-	client.players = append(client.players, player)
 	return client
 }
 
-// CreateClientSocket Initializes client socket. In case of
-// failure, error is printed in stdout/stderr and exit 1
-// is returned
-func (c *Client) createClientSocket() error {
-	maxRetries := 30
-	retryDelay := time.Second
-	
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		conn, err := net.Dial("tcp", c.config.ServerAddress)
-		if err == nil {
-			c.conn = conn
-			c.reader = bufio.NewReader(conn)
-			return nil
-		}
-		
-		if attempt < maxRetries {
-			log.Infof(
-				"action: connect | result: in_progress | client_id: %v | attempt: %v/%v | error: %v",
-				c.config.ID,
-				attempt,
-				maxRetries,
-				err,
-			)
-			time.Sleep(retryDelay)
-		} else {
-			log.Criticalf(
-				"action: connect | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return err
-		}
+func (c *Client) Start() error {
+	c.connection = NewConnection(c.config.ID, c.config.ServerAddress, c.Log)
+
+	if err := c.connection.Connect(); err != nil {
+		c.Log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return err
 	}
-	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+
+	return nil
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop() {
+func (c *Client) Run() {
+	if err := c.Start(); err != nil {
+		return
+	}
+	defer c.closeResources()
 
-	// creo el socket del cliente
-	if err := c.createClientSocket(); err != nil {
-		log.Errorf("action: create_client_socket | result: fail | client_id: %v | error: %v",
+	if c.isShutdownRequested() {
+		return
+	}
+
+	msg, err := c.connection.ReadLine()
+	c.connection.Close()
+
+	if err != nil {
+		c.Log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
 		return
 	}
 
-	// Envio el mensaje de agencia al servidor
-	fmt.Fprintf(
-		c.conn,
-		"%s\n",
+	c.Log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
 		c.config.ID,
+		msg,
 	)
+	
+	c.Log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
 
-	// envio cada jugador al servidor
-	for _, player := range c.players {
-		// verifico que no se haya recibido una señal de shutdown
-		select {
-		case <-c.shutdown_event:
-			log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
-			if c.conn != nil {
-				c.conn.Close()
-			}
-			log.Infof("action: graceful_shutdown | result: success | client_id: %v", c.config.ID)
-			return
-		default:
-		}
-
-		// envio el mensaje de cada jugador al servidor
-		jsonData, err := serializePlayer(player)
-		if err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
-
-		if err := writeAll(c.conn, jsonData); err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
-
-			// Escribir un salto de línea después del mensaje JSON
-		if err := writeAll(c.conn, []byte("\n")); err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
-
-		confirmation, err := readLine(c.reader)
-		if err != nil || confirmation == "" {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
-		}
-
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", player.Dni, player.Number)
-		log.Infof("action: send_message | result: success | client_id: %v | player: %v", c.config.ID, player.Name)
-
+func (c *Client) isShutdownRequested() bool {
+	select {
+	case <-c.shutdown_event:
+		c.Log.Infof("action: graceful_shutdown | result: in_progress | client_id: %v", c.config.ID)
+		return true
+	default:
+		return false
 	}
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+// closeResources closes all resources gracefully
+func (c *Client) closeResources() {
+	if c.connection != nil && c.connection.IsConnected() {
+		c.connection.Close()
+	}
 }
