@@ -1,7 +1,6 @@
 import socket
 import logging
 import signal
-import threading
 
 from .client import Client
 from .client_handler import ClientHandler
@@ -15,11 +14,11 @@ class Server:
         self._server_socket.settimeout(1.0)
         self._clients = []
         self.amount_clients = amount_clients
-        self._shutdown_event = threading.Event()
+        self._shutdown_event = False
         signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
 
     def __handle_graceful_shutdown(self, signum, frame):
-        self._shutdown_event.set()
+        self._shutdown_event = True
         logging.info('action: graceful_shutdown | result: in_progress')
 
     def run(self):
@@ -31,7 +30,7 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        while not self._shutdown_event.is_set():
+        while not self._shutdown_event:
             client_sock = self.__accept_new_connection()
             if client_sock is None:
                 continue
@@ -72,7 +71,7 @@ class Server:
         except socket.timeout:
             return None
         except OSError as e:
-            if self._shutdown_event.is_set():
+            if self._shutdown_event:
                 return None
             logging.error(f'action: accept_connections | result: fail | error: {e}')
             return None
