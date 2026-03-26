@@ -9,6 +9,7 @@ import (
 )
 
 const AMOUNTS_BETS_PER_MESSAGE = 1
+const MESSAGE_FIN = "FIN"
 
 // ProtocolHandler manages serialization and sending of bets batches
 type ProtocolHandler struct {
@@ -34,7 +35,7 @@ func (p *ProtocolHandler) serialize(bet Bet) []byte {
 		p.formatBet(&buffer, bet)
 		buffer.WriteString("\n")
 	}
-	buffer.WriteString("FIN")
+	buffer.WriteString(MESSAGE_FIN + "\n")
 	return buffer.Bytes()
 }
 
