@@ -89,7 +89,39 @@ func (c *Client) Run() {
 		return
 	}
 
+	c.closeResources()
 	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+
+	if err := c.askWinnersLoop(); err != nil {
+		c.log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+}
+
+func (c *Client) askWinnersLoop() error {
+	for {
+		if err := c.Start(); err != nil {
+			return err
+		}
+
+		if err := c.protocol.SendAgencyIDMessage(); err != nil {
+			c.closeResources()
+			return err
+		}
+
+		count, ready, err := c.protocol.AskWinners()
+		c.closeResources()
+		if err != nil {
+			return err
+		}
+
+		if ready {
+			c.log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", count)
+			return nil
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (c *Client) runBatchLoop(batchBuilder *BatchBuilder) error {

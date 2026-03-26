@@ -1,35 +1,16 @@
-## Ejercicio N°6:
->Modificar los clientes para que envíen varias apuestas a la vez (modalidad conocida como procesamiento por _chunks_ o _batchs_). 
->Los _batchs_ permiten que el cliente registre varias apuestas en una misma consulta, acortando tiempos de transmisión y procesamiento.
+## Ejercicio N°7:
+
+>Modificar los clientes para que notifiquen al servidor al finalizar con el envío de todas las apuestas y así proceder con el sorteo.
+>Inmediatamente después de la notificacion, los clientes consultarán la lista de ganadores del sorteo correspondientes a su agencia.
+>Una vez el cliente obtenga los resultados, deberá imprimir por log: `action: consulta_ganadores | result: success | cant_ganadores: ${CANT}`.
 >
->La información de cada agencia será simulada por la ingesta de su archivo numerado correspondiente, provisto por la cátedra dentro de `.data/datasets.zip`.
->Los archivos deberán ser inyectados en los containers correspondientes y persistido por fuera de la imagen (hint: `docker volumes`), manteniendo la convencion de que el cliente N utilizara el archivo de apuestas `.data/agency-{N}.csv` .
+>El servidor deberá esperar la notificación de las 5 agencias para considerar que se realizó el sorteo e imprimir por log: `action: sorteo | result: success`.
+>Luego de este evento, podrá verificar cada apuesta con las funciones `load_bets(...)` y `has_won(...)` y retornar los DNI de los ganadores de la agencia en cuestión. Antes del sorteo no se podrán responder consultas por la lista de ganadores con información parcial.
 >
->En el servidor, si todas las apuestas del *batch* fueron procesadas correctamente, imprimir por log: `action: apuesta_recibida | result: success | cantidad: ${CANTIDAD_DE_APUESTAS}`. En caso de detectar un error con alguna de las apuestas, debe responder con un código de error a elección e imprimir: `action: apuesta_recibida | result: fail | cantidad: ${CANTIDAD_DE_APUESTAS}`.
+>Las funciones `load_bets(...)` y `has_won(...)` son provistas por la cátedra y no podrán ser modificadas por el alumno.
 >
->La cantidad máxima de apuestas dentro de cada _batch_ debe ser configurable desde config.yaml. Respetar la clave `batch: maxAmount`, pero modificar el valor por defecto de modo tal que los paquetes no excedan los 8kB. 
->
->Por su parte, el servidor deberá responder con éxito solamente si todas las apuestas del _batch_ fueron procesadas correctamente.
+>No es correcto realizar un broadcast de todos los ganadores hacia todas las agencias, se espera que se informen los DNIs ganadores que correspondan a cada una de ellas.
 
 ---
 
 ## Solucion:
-
-Variable de entorno para clientes donde se define la cantidad máxima de apuestas por batch:
-```bash
-MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-8192}"
-```
-
-
-Agrego los archivos de apuestas, montando un volumen en cada cliente
-```bash
-  - ./.data:/.data:ro
-```
-El protocolo de comunicación entre cliente y servidor se modificó para enviar y recibir batchs de apuestas, en lugar de apuestas individuales. El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente.
-
-Para modularizar, cree un `batch_builder` que se encarga de leer el archivo de apuestas y construir los batchs a enviar al servidor, respetando la cantidad máxima de apuestas por batch definida en laS variableS de entorno `MAX_BATCH_AMOUNT` y en el tamaño del `MAX_BATCH_SIZE`.
-
-Si se leyo una apuesta pero el batch se lleno, se envia el batch al servidor y se comienza a construir un nuevo batch con la apuesta leida para luego ser enviado al servidor.
-
-El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente. En caso de detectar un error con alguna de las apuestas, responde con un código de error y registra el fallo en el log.
-

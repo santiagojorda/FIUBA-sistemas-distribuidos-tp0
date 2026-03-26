@@ -13,6 +13,8 @@ const AGENCY_CSV_PATH_TEMPLATE = "/.data/agency-%s.csv"
 const MESSAGE_FIN = "FIN"
 const MESSAGE_OK = "ok"
 const MESSAGE_ERROR = "error"
+const MESSAGE_ASK_WINNERS = "ASK_WINNERS"
+const MESSAGE_WAIT = "wait"
 
 // Protocol manages serialization and sending of bets batches
 type Protocol struct {
@@ -32,6 +34,51 @@ func NewProtocol(config ClientConfig, connection *Connection) (*Protocol, error)
 		log:        config.Log,
 		clientID:   config.ID,
 	}, nil
+}
+
+
+
+func (p *Protocol) AskWinners() (int, bool, error) {
+
+	if err := p.SendAskWinnersMessage(); err != nil {
+		return 0, false, err
+	}
+
+	response, err := p.connection.Receive()
+	if err != nil {
+		p.log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", p.clientID, err)
+		return 0, false, fmt.Errorf("failed to receive winners: %v", err)
+	}
+
+	response = strings.TrimSpace(response)
+	if response == "" {
+		return 0, false, fmt.Errorf("empty winners response")
+	}
+
+	if strings.EqualFold(response, MESSAGE_WAIT) {
+		return 0, false, nil
+	}
+
+	count, err := strconv.Atoi(response)
+	if err != nil {
+		return 0, false, fmt.Errorf("invalid winners response %q: %v", response, err)
+	}
+	if count < 0 {
+		return 0, false, fmt.Errorf("invalid winners count: %d", count)
+	}
+
+	return count, true, nil
+}
+
+func (p *Protocol) SendAskWinnersMessage() error {
+	SendAskWinnersMessage := []byte(MESSAGE_ASK_WINNERS + "\n")
+	if err := p.connection.Send(SendAskWinnersMessage); err != nil {
+		p.log.Errorf("action: send_message | result: fail | client_id: %v | error: %v", p.clientID, err)
+		return err
+	}
+
+	p.log.Infof("action: send_ask_winners | result: success | client_id: %v", p.clientID)
+	return nil
 }
 
 func (p *Protocol) SendAgencyIDMessage() error {

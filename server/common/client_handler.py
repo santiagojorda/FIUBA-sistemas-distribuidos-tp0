@@ -4,12 +4,16 @@ from .protocol import parse_agency, parse_batch_count, parse_bet_line
 from .utils import store_bets
 
 MESSAGE_FIN = 'FIN'
+MESSAGE_ASK_WINNERS = 'ASK_WINNERS'
+MESSAGE_WAIT = 'wait\n'
 MESSAGE_OK = 'ok\n'
 MESSAGE_ERROR = 'error\n'
 
 class ClientHandler:
-    def __init__(self, client):
+    def __init__(self, client, register_finished_agency, get_winners_count):
         self._client = client
+        self._register_finished_agency = register_finished_agency
+        self._get_winners_count = get_winners_count
 
     def get_agency_id(self):
         """
@@ -44,8 +48,17 @@ class ClientHandler:
                 if msg == '':
                     continue
 
+                if msg.upper() == MESSAGE_ASK_WINNERS:
+                    winners_count = self._get_winners_count(agency_id)
+                    if winners_count is None:
+                        self._client.send(MESSAGE_WAIT)
+                    else:
+                        self._client.send(f'{winners_count}\n')
+                    break
+                
                 if msg.upper() == MESSAGE_FIN:
                     logging.info(f'action: receive_message | result: success | ip: {self._client._ip} | msg: {MESSAGE_FIN}')
+                    self._register_finished_agency(agency_id)
                     break
 
                 batch_count = parse_batch_count(msg)

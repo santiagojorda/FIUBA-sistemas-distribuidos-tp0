@@ -1,4 +1,5 @@
 import csv
+from typing import Iterator
 from .bet import Bet
 
 """ Bets storage location. """
@@ -31,3 +32,21 @@ def load_bets() -> list[Bet]:
         for row in reader:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
+
+def winners_count_by_agency() -> dict[int, int]:
+    winners: dict[int, int] = {}
+    try:
+        for bet in load_bets():
+            if has_won(bet):
+                winners[bet.agency] = winners.get(bet.agency, 0) + 1
+    except FileNotFoundError:
+        return {}
+
+    return winners
+
+def winner_documents_by_agency(agency: int) -> list[str]:
+    winners: list[str] = []
+    for bet in load_bets():
+        if bet.agency == agency and has_won(bet):
+            winners.append(str(bet.document))
+    return winners
