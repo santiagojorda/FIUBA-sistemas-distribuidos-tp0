@@ -27,7 +27,7 @@ class Client:
         while total_sent < len(data):
             sent = self.sock.send(data[total_sent:])
             if sent == 0:
-                return False  # Conexión cerrada
+                return False
             total_sent += sent
         return True
         
@@ -52,7 +52,6 @@ class Client:
             self._recv_buffer += chunk
     
     def receive_json(self):
-        """Lee un mensaje JSON hasta encontrar newline"""
         msg = self.receive_message()
         if msg is None:
             return None
