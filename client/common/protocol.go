@@ -2,18 +2,14 @@ package common
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 
 	"github.com/op/go-logging"
 )
 
+const AGENCY_CSV_PATH_TEMPLATE = "/.data/agency-%s.csv"
 const MESSAGE_FIN = "FIN"
-const defaultMaxBatchAmount = 1
-const defaultMaxBatchSize = 8 * 1024
 
 // Protocol manages serialization and sending of bets batches
 type Protocol struct {
@@ -25,21 +21,29 @@ type Protocol struct {
 }
 
 // NewProtocol creates a new Protocol instance
-func NewProtocol(connection *Connection, log *logging.Logger, clientID string, maxAmount int, maxSize int) *Protocol {
-	if maxAmount <= 0 {
-		maxAmount = defaultMaxBatchAmount
+func NewProtocol(config ClientConfig, connection *Connection) (*Protocol, error) {
+
+	if config.MaxBatchAmount <= 0 {
+		config.Log.Warningf("Invalid max batch amount %v", config.MaxBatchAmount)
+		return nil, fmt.Errorf("invalid max batch amount: %d", config.MaxBatchAmount)
 	}
-	if maxSize <= 0 {
-		maxSize = defaultMaxBatchSize
+
+	if config.MaxBatchSize <= 0 {
+		config.Log.Warningf("Invalid max batch size %v", config.MaxBatchSize)
+		return nil, fmt.Errorf("invalid max batch size: %d", config.MaxBatchSize)
+	}
+
+	if connection == nil {
+		return nil, fmt.Errorf("connection cannot be nil")
 	}
 
 	return &Protocol{
 		connection: connection,
-		log:        log,
-		clientID:   clientID,
-		maxAmount:  maxAmount,
-		maxSize:    maxSize,
-	}
+		log:        config.Log,
+		clientID:   config.ID,
+		maxAmount:  config.MaxBatchAmount,
+		maxSize:    config.MaxBatchSize,
+	}, nil
 }
 
 func (p *Protocol) SendAgencyIDMessage() error {
@@ -64,88 +68,13 @@ func (p *Protocol) SendFINMessage() error {
 
 // SendBatchesFromCSV reads the agency CSV and sends batches to server.
 func (p *Protocol) SendBatchesFromCSV() error {
-	file, err := os.Open(fmt.Sprintf("/.data/agency-%s.csv", p.clientID))
+	file, err := p.openAgencyCSVFile()
 	if err != nil {
-		return fmt.Errorf("failed to open CSV file: %v", err)
+		return err
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(file)
-	carry := Bet{}
-
-	for {
-		bets, nextCarry, reachedEOF, err := p.readNextBatch(reader, carry)
-		if err != nil {
-			return err
-		}
-
-		carry = nextCarry
-		if len(bets) == 0 {
-			if reachedEOF {
-				return nil
-			}
-			continue
-		}
-
-		if err := p.sendBatch(bets); err != nil {
-			return err
-		}
-
-		if reachedEOF && carry == (Bet{}) {
-			return nil
-		}
-	}
-}
-
-func (p *Protocol) readNextBatch(reader *csv.Reader, carry Bet) ([]Bet, Bet, bool, error) {
-	bets := []Bet{}
-	packageSize := 0
-
-	if carry != (Bet{}) {
-		carrySize := serializedBetSize(carry)
-		if carrySize <= p.maxSize {
-			bets = append(bets, carry)
-			packageSize = carrySize
-		} else {
-			return nil, Bet{}, false, fmt.Errorf("single bet exceeds max packet size")
-		}
-		carry = Bet{}
-	}
-
-	for len(bets) < p.maxAmount {
-		record, err := reader.Read()
-		if err == io.EOF {
-			return bets, Bet{}, true, nil
-		}
-		if err != nil {
-			return nil, Bet{}, false, fmt.Errorf("failed to read CSV record: %v", err)
-		}
-		if len(record) < 5 {
-			continue
-		}
-
-		bet := Bet{
-			Name:      record[0],
-			Lastname:  record[1],
-			Dni:       record[2],
-			Birthdate: record[3],
-			Number:    record[4],
-		}
-
-		betSize := serializedBetSize(bet)
-		if betSize > p.maxSize {
-			return nil, Bet{}, false, fmt.Errorf("single bet exceeds max packet size")
-		}
-
-		if packageSize+betSize > p.maxSize {
-			return bets, bet, false, nil
-		}
-
-		bets = append(bets, bet)
-		packageSize += betSize
-	}
-
-	return bets, carry, false, nil
+	return p.sendBatchesLoop(file)
 }
 
 func (p *Protocol) sendBatch(bets []Bet) error {
@@ -160,11 +89,7 @@ func (p *Protocol) sendBatch(bets []Bet) error {
 		return fmt.Errorf("failed to receive confirmation: %v", err)
 	}
 
-	for _, bet := range bets {
-		p.log.Infof("action: apuesta_enviada | result: success | client_id: %v | dni: %v | numero: %v", p.clientID, bet.Dni, bet.Number)
-	}
-
-	p.log.Infof("action: batch_enviado | result: success | cantidad: %v", len(bets))
+	p.log.Infof("action: batch_enviado | result: success | cantidad: %v | size: %v", len(bets), len(payload))
 	return nil
 }
 
@@ -178,11 +103,6 @@ func (p *Protocol) serializeBatchPayload(bets []Bet) []byte {
 		buffer.WriteString("\n")
 	}
 	return buffer.Bytes()
-}
-
-func serializedBetSize(bet Bet) int {
-	// 4 pipes + trailing newline
-	return len(bet.Name) + len(bet.Lastname) + len(bet.Dni) + len(bet.Birthdate) + len(bet.Number) + 5
 }
 
 // formatBet writes a single bet in pipe-delimited format

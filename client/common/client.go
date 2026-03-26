@@ -42,7 +42,13 @@ func NewClient(config ClientConfig) *Client {
 
 func (c *Client) Start() error {
 	c.connection = NewConnection(c.config.ID, c.config.ServerAddress, c.log)
-	c.protocol = NewProtocol(c.connection, c.log, c.config.ID, c.config.MaxBatchAmount, c.config.MaxBatchSize)
+
+	protocol, err := NewProtocol(c.config, c.connection)
+	if err != nil {
+		c.log.Errorf("action: config | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return err
+	}
+	c.protocol = protocol
 
 	if err := c.connection.Connect(); err != nil {
 		c.log.Errorf("action: connect | result: fail | client_id: %v | error: %v", c.config.ID, err)
