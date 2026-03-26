@@ -24,6 +24,7 @@ class ClientHandler:
     def handle(self):
         try:
             agency_id = self.get_agency_id()
+            total_bets_received = 0
 
             while True:
                 msg = self._client.receive_message()
@@ -37,12 +38,14 @@ class ClientHandler:
 
                 if msg.upper() == MESSAGE_FIN:
                     logging.info(f'action: receive_message | result: success | ip: {self._client._ip} | msg: {MESSAGE_FIN}')
+                    logging.info(
+                        f'action: apuestas_totales_agencia | result: success | agency_id: {agency_id} | cantidad: {total_bets_received}'
+                    )
                     break
 
                 bets = []
 
                 try:
-                    # At this point, `msg` is the first bet line of the batch.
                     bets.append(parse_bet_line(msg, agency_id))
 
                     while True:
@@ -60,6 +63,7 @@ class ClientHandler:
                         bet = parse_bet_line(raw_bet, agency_id)
                         bets.append(bet)
                     store_bets(bets)
+                    total_bets_received += len(bets)
                     logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
                     self._client.send(MESSAGE_OK)
                 except (ValueError, KeyError) as batch_error:
