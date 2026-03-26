@@ -1,8 +1,6 @@
 import logging
 
 from .protocol import parse_agency, parse_batch_count, parse_bet_line
-from .utils import store_bets
-
 MESSAGE_FIN = 'FIN'
 MESSAGE_ASK_WINNERS = 'ASK_WINNERS'
 MESSAGE_WAIT = 'wait\n'
@@ -10,10 +8,11 @@ MESSAGE_OK = 'ok\n'
 MESSAGE_ERROR = 'error\n'
 
 class ClientHandler:
-    def __init__(self, client, register_finished_agency, get_winners_count):
+    def __init__(self, client, register_finished_agency, get_winners_count, persist_bets):
         self._client = client
         self._register_finished_agency = register_finished_agency
         self._get_winners_count = get_winners_count
+        self._persist_bets = persist_bets
 
     def get_agency_id(self):
         """
@@ -73,7 +72,7 @@ class ClientHandler:
                         bet = parse_bet_line(raw_bet, agency_id)
                         bets.append(bet)
 
-                    store_bets(bets)
+                    self._persist_bets(bets)
                     logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
                     self._client.send(MESSAGE_OK)
                 except (ValueError, KeyError) as batch_error:
