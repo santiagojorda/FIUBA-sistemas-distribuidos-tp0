@@ -11,22 +11,6 @@ def parse_agency(raw_agency: str) -> str:
 
     return agency
 
-
-def parse_batch_count(raw_count: str) -> int:
-    if raw_count is None:
-        raise ValueError('missing batch count')
-
-    count_msg = raw_count.strip()
-    if count_msg == '':
-        raise ValueError('empty batch count')
-
-    batch_count = int(count_msg)
-    if batch_count < 0:
-        raise ValueError('batch count must be positive')
-
-    return batch_count
-
-
 def parse_bet_line(raw_bet: str, agency: str) -> Bet:
     if raw_bet is None:
         raise ValueError('missing bet data')

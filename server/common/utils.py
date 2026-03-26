@@ -32,7 +32,6 @@ def load_bets() -> list[Bet]:
         for row in reader:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
-
 def winners_count_by_agency() -> dict[int, int]:
     winners: dict[int, int] = {}
     try:

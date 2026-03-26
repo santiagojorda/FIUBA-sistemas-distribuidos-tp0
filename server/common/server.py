@@ -7,6 +7,8 @@ from .client import Client
 from .client_handler import ClientHandler
 from .utils import store_bets, winners_count_by_agency
 
+SECONDS_TO_WAIT_FOR_SORTEO = 3
+
 class Server:
     def __init__(self, port, listen_backlog, amount_clients):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -20,7 +22,7 @@ class Server:
         self._shutdown_event = threading.Event()
         self._state_lock = threading.Lock()
         self._sorteo_condition = threading.Condition(self._state_lock)
-        self._bets_lock = threading.Lock()
+        self._bets_file_lock = threading.Lock()
 
         self._finished_agencies = set()
         self._sorteo_done = False
@@ -74,7 +76,7 @@ class Server:
         handler.handle()
 
     def store_bets_thread_safe(self, bets):
-        with self._bets_lock:
+        with self._bets_file_lock:
             store_bets(bets)
 
     def register_finished_agency(self, agency_id):
@@ -93,7 +95,7 @@ class Server:
 
         with self._sorteo_condition:
             while not self._sorteo_done and not self._shutdown_event.is_set():
-                self._sorteo_condition.wait(timeout=1)
+                self._sorteo_condition.wait(timeout=SECONDS_TO_WAIT_FOR_SORTEO)
 
             if not self._sorteo_done:
                 return None

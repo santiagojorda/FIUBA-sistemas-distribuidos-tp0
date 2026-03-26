@@ -1,8 +1,9 @@
 import logging
 
-from .bet_parser import parse_agency, parse_batch_count, parse_bet_line
+from .bet_parser import parse_agency, parse_bet_line
 MESSAGE_FIN = 'FIN'
 MESSAGE_ASK_WINNERS = 'ASK_WINNERS'
+MESSAGE_END_BATCH = 'END_BATCH'
 MESSAGE_WAIT = 'wait\n'
 MESSAGE_OK = 'ok\n'
 MESSAGE_ERROR = 'error\n'
@@ -60,14 +61,23 @@ class ClientHandler:
                     self._register_finished_agency(agency_id)
                     break
 
-                batch_count = parse_batch_count(msg)
                 bets = []
 
                 try:
-                    for _ in range(batch_count):
+                    # At this point, `msg` is the first bet line of the batch.
+                    bets.append(parse_bet_line(msg, agency_id))
+
+                    while True:
                         raw_bet = self._client.receive_message()
                         if raw_bet is None:
                             raise ValueError('connection closed while receiving batch')
+
+                        raw_bet = raw_bet.strip()
+                        if raw_bet == '':
+                            continue
+
+                        if raw_bet.upper() == MESSAGE_END_BATCH:
+                            break
 
                         bet = parse_bet_line(raw_bet, agency_id)
                         bets.append(bet)
@@ -76,7 +86,7 @@ class ClientHandler:
                     logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
                     self._client.send(MESSAGE_OK)
                 except (ValueError, KeyError) as batch_error:
-                    logging.info(f'action: apuesta_recibida | result: fail | cantidad: {batch_count}')
+                    logging.info(f'action: apuesta_recibida | result: fail | cantidad: {len(bets)}')
                     logging.error(f'action: receive_message | result: fail | ip: {self._client._ip} | error: {batch_error}')
                     self._client.send(MESSAGE_ERROR)
         except (OSError, ValueError, KeyError) as e:
