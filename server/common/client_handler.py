@@ -17,9 +17,7 @@ class ClientHandler:
             raise ValueError('missing agency message')
         
         agency_id = parse_agency(agency_msg)
-        logging.info(
-            f'action: receive_message | result: success | ip: {self._client._ip} | agency_id: {agency_id}'
-        )
+        logging.info(f'action: receive_message | result: success | ip: {self._client._ip} | agency_id: {agency_id}')
         return agency_id
 
     def handle(self):

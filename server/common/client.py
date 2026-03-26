@@ -1,7 +1,3 @@
-
-import json
-import socket
-
 BUFFER = 1024
 DECODE = 'utf-8'
 
@@ -50,9 +46,3 @@ class Client:
                 return None
 
             self._recv_buffer += chunk
-    
-    def receive_json(self):
-        msg = self.receive_message()
-        if msg is None:
-            return None
-        return json.loads(msg)
