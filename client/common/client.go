@@ -15,7 +15,6 @@ var log = logging.MustGetLogger("log")
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
-	LoopAmount    int
 	LoopPeriod    time.Duration
 }
 
@@ -67,21 +66,60 @@ func (c *Client) Run() {
 		return
 	}
 
-	msg, err := c.connection.ReadLine()
-	c.connection.Close()
-
-	if err != nil {
-		c.Log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+	if err := c.connection.SendAgency(c.config.ID); err != nil {
+		c.Log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
 		return
 	}
 
-	c.Log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
+	c.Log.Infof("action: send_agency | result: success | client_id: %v | agency_id: %v",
 		c.config.ID,
-		msg,
+		c.config.ID,
 	)
+
+	for _, bet := range c.bets {
+		if err := c.connection.Send(SerializeBets([]Bet{bet})); err != nil {
+			c.Log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return
+		}
+
+		c.Log.Infof("action: apuesta_enviada | result: success | client_id: %v | dni: %v | numero: %v",
+			c.config.ID,
+			bet.Dni,
+			bet.Number,
+		)
+
+		msg, err := c.connection.ReadLine()
+		if err != nil {
+			c.Log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return
+		}
+
+		c.Log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
+			c.config.ID,
+			msg,
+		)
+
+		if c.config.LoopPeriod > 0 {
+			time.Sleep(c.config.LoopPeriod)
+		}
+	}
+
+	if err := c.connection.SendMessage(MESSAGE_FIN + "\n"); err != nil {
+		c.Log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
 	
 	c.Log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }

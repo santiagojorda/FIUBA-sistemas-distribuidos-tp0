@@ -1,6 +1,6 @@
 import logging
 
-from .protocol import parse_agency, parse_batch_count, parse_bet_line
+from .protocol import parse_agency, parse_bet_line
 from .utils import store_bets
 
 MESSAGE_FIN = 'FIN'
@@ -9,22 +9,28 @@ class ClientHandler:
     def __init__(self, client):
         self._client = client
 
+    def get_agency_id(self):
+        """
+        Get the agency id from the client.
+
+        The client must send a message with the agency id. If the message is empty or None, an error is raised.
+        """
+        agency_msg = self._client.receive_message()
+        if agency_msg is None:
+            raise ValueError('missing agency message')
+        
+        agency_id = parse_agency(agency_msg)
+        logging.info(
+            f'action: receive_message | result: success | ip: {self._client._ip} | agency_id: {agency_id}'
+        )
+        return agency_id
+
     def handle(self):
         """
         Handle the full client lifecycle for the bets protocol.
         """
         try:
-            agency_msg = self._client.receive_message()
-            if agency_msg is None:
-                logging.warning(
-                    f'action: receive_message | result: fail | ip: {self._client._ip} | error: connection closed'
-                )
-                return
-
-            agency = parse_agency(agency_msg)
-            logging.info(
-                f'action: receive_message | result: success | ip: {self._client._ip} | msg: {agency_msg}'
-            )
+            agency_id = self.get_agency_id()
 
             while True:
                 count_msg = self._client.receive_message()
@@ -42,19 +48,10 @@ class ClientHandler:
                     )
                     break
 
-                batch_count = parse_batch_count(count_msg)
-                bets = []
-
-                for _ in range(batch_count):
-                    raw_bet = self._client.receive_message()
-                    if raw_bet is None:
-                        raise ValueError('connection closed while receiving batch')
-
-                    bets.append(parse_bet_line(raw_bet, agency))
-
-                store_bets(bets)
+                bet = parse_bet_line(count_msg, agency_id)
+                store_bets([bet])
                 logging.info(
-                    f'action: apuesta_recibida | result: success | agency: {agency} | cantidad: {len(bets)}'
+                    f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}'
                 )
                 self._client.send('ok\n')
         except (OSError, ValueError, KeyError) as e:

@@ -1,5 +1,5 @@
 import csv
-from bet import Bet
+from .bet import Bet
 
 """ Bets storage location. """
 STORAGE_FILEPATH = "./bets.csv"

@@ -6,6 +6,7 @@ services:
     entrypoint: ["python3", "/server/main.py"]
     environment:
       - PYTHONUNBUFFERED=1
+      - AMOUNT_CLIENTS=2
     networks:
       - testing_net
     volumes:
@@ -22,6 +23,24 @@ services:
       - DOCUMENTO=40867051
       - NACIMIENTO=1990-01-01
       - NUMERO=123456781
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./client/config.yaml:/config.yaml
+  client2:
+    container_name: client2
+    image: client:latest
+    entrypoint: ["/client"]
+    restart: no
+    environment:
+      - CLI_ID=2
+      - NOMBRE=nombre2
+      - APELLIDO=apellido2
+      - DOCUMENTO=40867052
+      - NACIMIENTO=1990-01-02
+      - NUMERO=123456782
     networks:
       - testing_net
     depends_on:
