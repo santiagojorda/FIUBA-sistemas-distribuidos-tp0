@@ -32,7 +32,8 @@ default:
 Y en el servidor es algo parecido, se utiliza la libreria `signal` para capturar la señal SIGTERM y ejecutar una función de limpieza antes de salir. Se asegura de cerrar correctamente los recursos antes de que la aplicación termine.
 
 
-creo un `self.__shutdown_event` para manejar el evento de cierre y un método `__handle_graceful_shutdown` para cerrar los recursos correctamente al recibir la señal SIGTERM. Luego, registro el manejador de señales para SIGTERM utilizando `signal.signal`.
+creo un `self.__shutdown_event` que es un booleano para manejar el evento de cierre y un método `__handle_graceful_shutdown` para cerrar los recursos correctamente al recibir la señal SIGTERM. 
+Vinculo el manejador de señales para SIGTERM utilizando `signal.signal`.
 
 ```python
 signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
@@ -40,7 +41,7 @@ signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
 
 y en el loop principal del servidor chequeo constantemente el evento de cierre `self._shutdown_event` para determinar si se debe cerrar el servidor de forma _graceful_:
 ```python
-while not self._shutdown_event.is_set():
+while not self._shutdown_event:
     client_sock = self.__accept_new_connection()
     if client_sock is None:
         continue
