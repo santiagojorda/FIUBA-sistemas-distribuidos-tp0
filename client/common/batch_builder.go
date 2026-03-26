@@ -48,16 +48,16 @@ func (b *BatchBuilder) Close() error {
 
 // NextBatch returns the next batch, plus a flag indicating if EOF was reached.
 func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
-	bets, packageSize, err := b.initializeBatchWithCarry()
-	if err != nil {
-		return nil, false, err
+	bets := make([]Bet, 0, b.maxAmount)
+	packageSize := 0
+
+	if b.carry != (Bet{}) {
+		bets = append(bets, b.carry)
+		packageSize += serializedBetSize(b.carry)
+		b.carry = Bet{}
 	}
 
-	for {
-		if len(bets) >= b.maxAmount {
-			return bets, false, nil
-		}
-
+	for len(bets) < b.maxAmount {
 		bet, reachedEOF, err := readNextValidBet(b.reader)
 		if err != nil {
 			return nil, false, err
@@ -79,25 +79,8 @@ func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
 		bets = append(bets, bet)
 		packageSize += betSize
 	}
-}
 
-func (b *BatchBuilder) initializeBatchWithCarry() ([]Bet, int, error) {
-	bets := []Bet{}
-	packageSize := 0
-
-	if b.carry == (Bet{}) {
-		return bets, packageSize, nil
-	}
-
-	carrySize := serializedBetSize(b.carry)
-	if carrySize > b.maxSize {
-		return nil, 0, fmt.Errorf("single bet exceeds max packet size")
-	}
-
-	bets = append(bets, b.carry)
-	b.carry = Bet{}
-	packageSize = carrySize
-	return bets, packageSize, nil
+	return bets, false, nil
 }
 
 func readNextValidBet(reader *csv.Reader) (Bet, bool, error) {

@@ -1,6 +1,6 @@
 import logging
 
-from .protocol import parse_agency, parse_batch_count, parse_bet_line
+from .bet_parser import parse_agency, parse_batch_count, parse_bet_line
 MESSAGE_FIN = 'FIN'
 MESSAGE_ASK_WINNERS = 'ASK_WINNERS'
 MESSAGE_WAIT = 'wait\n'
