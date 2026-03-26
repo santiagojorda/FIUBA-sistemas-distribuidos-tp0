@@ -89,7 +89,6 @@ func (c *Client) Run() {
 		return
 	}
 
-	c.closeResources()
 	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 
 	if err := c.askWinnersLoop(); err != nil {
