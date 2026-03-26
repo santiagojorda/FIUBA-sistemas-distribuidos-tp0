@@ -2,9 +2,6 @@ package common
 
 import (
 	"bytes"
-	"fmt"
-	"strconv"
-
 	"github.com/op/go-logging"
 )
 
