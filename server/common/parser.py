@@ -1,6 +1,5 @@
 from .bet import Bet
 
-
 def parse_agency(raw_agency: str) -> str:
     if raw_agency is None:
         raise ValueError('missing agency')

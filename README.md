@@ -26,6 +26,10 @@ Lo que hice fue crear un protocolo de comunicación entre el cliente y el servid
 
 Por consigna, cada cliente recibe los datos de una  apuesta por variable de entorno, este se encarga de serializarlo y enviarlo al servidor.
 
-El cliente envia un primer mensaje con su ID al servidor para realizar el registro. Luego envia la apuesta en formato 
-`${NOMBRE}|${APELLIDO}|${DOCUMENTO}|${NACIMIENTO}|${NUMERO}\n`
-y por ultimo envia un mensaje de `FIN\n` para indicar que no se enviaran mas apuestas. El servidor recibe cada mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`.
+El cliente envia un primer mensaje con su ID al servidor para realizar el registro. 
+> `${ID}\n`
+Luego envia la apuesta en formato 
+> `${NOMBRE}|${APELLIDO}|${DOCUMENTO}|${NACIMIENTO}|${NUMERO}\n`
+y por ultimo envia un mensaje de `FIN\n` para indicar que no se enviaran mas apuestas. 
+> `FIN\n`
+El servidor recibe cada mensaje, lo deserializa y almacena la información utilizando la función `store_bet(...)`.
