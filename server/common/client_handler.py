@@ -16,11 +16,6 @@ class ClientHandler:
         self._persist_bets = persist_bets
 
     def get_agency_id(self):
-        """
-        Get the agency id from the client.
-
-        The client must send a message with the agency id. If the message is empty or None, an error is raised.
-        """
         agency_msg = self._client.receive_message()
         if agency_msg is None:
             raise ValueError('missing agency message')
@@ -32,12 +27,9 @@ class ClientHandler:
         return agency_id
 
     def handle(self):
-        """
-        Handle the full client lifecycle for the bets protocol.
-        """
         try:
             agency_id = self.get_agency_id()
-
+            
             while True:
                 msg = self._client.receive_message()
                 if msg is None:
@@ -64,7 +56,6 @@ class ClientHandler:
                 bets = []
 
                 try:
-                    # At this point, `msg` is the first bet line of the batch.
                     bets.append(parse_bet_line(msg, agency_id))
 
                     while True:
