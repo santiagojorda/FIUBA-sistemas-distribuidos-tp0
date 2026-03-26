@@ -7,7 +7,6 @@ from .client_handler import ClientHandler
 
 class Server:
     def __init__(self, port, listen_backlog, amount_clients):
-        # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
@@ -22,14 +21,6 @@ class Server:
         logging.info('action: graceful_shutdown | result: in_progress')
 
     def run(self):
-        """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
-        """
-
         while not self._shutdown_event:
             client_sock = self.__accept_new_connection()
             if client_sock is None:
@@ -53,13 +44,6 @@ class Server:
         handler.handle()
 
     def __accept_new_connection(self):
-        """
-        Accept new connections
-
-        Function blocks until a connection to a client is made.
-        Then connection created is printed and returned
-        """
-
         try:
             logging.info('action: accept_connections | result: in_progress')
             client_socket, addr = self._server_socket.accept()
