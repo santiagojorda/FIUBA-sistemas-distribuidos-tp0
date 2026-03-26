@@ -14,3 +14,11 @@
 ---
 
 ## Solucion:
+
+Se incorporaron dos nuevos mensajes, `ASK_WINNERS` y `WAIT`, para permitir que los clientes consulten por los ganadores y que el servidor gestione la sincronización del proceso.
+
+El servidor espera a que las cinco agencias finalicen el envío de sus apuestas. Una vez cumplida esta condición, se realiza el sorteo. A partir de ese momento, cuando un cliente consulta por los ganadores, el servidor verifica si el sorteo ya fue efectuado y responde con la cantidad de ganadores correspondiente a la agencia del cliente.
+
+Si un cliente consulta antes de que el sorteo haya sido realizado, envía un mensaje `ASK_WINNERS` y el servidor responde con `WAIT`, indicando que debe aguardar antes de volver a intentar. Dado que el servidor procesa los mensajes de forma secuencial (sin mecanismos de concurrencia), el cliente implementa una espera activa: tras recibir `WAIT`, aguarda un intervalo de tiempo y vuelve a realizar la consulta.
+
+Una vez realizado el sorteo, el servidor responde a cada cliente con los resultados de ganadores de su agencia, y cada cliente registra en su log la cantidad de ganadores obtenida.

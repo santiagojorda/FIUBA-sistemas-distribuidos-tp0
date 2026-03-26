@@ -9,6 +9,8 @@ import (
 	"github.com/op/go-logging"
 )
 
+const TIME_RETRY_ASK_WINNERS = 2000 * time.Millisecond
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
 	ID             string
@@ -119,7 +121,7 @@ func (c *Client) askWinnersLoop() error {
 			return nil
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(TIME_RETRY_ASK_WINNERS)
 	}
 }
 
