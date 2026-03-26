@@ -36,8 +36,6 @@ func NewProtocol(config ClientConfig, connection *Connection) (*Protocol, error)
 	}, nil
 }
 
-
-
 func (p *Protocol) AskWinners() (int, bool, error) {
 
 	if err := p.SendAskWinnersMessage(); err != nil {

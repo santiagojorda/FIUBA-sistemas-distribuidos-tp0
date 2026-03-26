@@ -16,11 +16,6 @@ class ClientHandler:
         self._get_winners_count = get_winners_count
 
     def get_agency_id(self):
-        """
-        Get the agency id from the client.
-
-        The client must send a message with the agency id. If the message is empty or None, an error is raised.
-        """
         agency_msg = self._client.receive_message()
         if agency_msg is None:
             raise ValueError('missing agency message')
@@ -32,9 +27,6 @@ class ClientHandler:
         return agency_id
 
     def handle(self):
-        """
-        Handle the full client lifecycle for the bets protocol.
-        """
         try:
             agency_id = self.get_agency_id()
 
