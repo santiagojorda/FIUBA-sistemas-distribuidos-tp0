@@ -25,6 +25,7 @@ services:
     entrypoint: ["python3", "/server/main.py"]
     environment:
       - PYTHONUNBUFFERED=1
+      - AMOUNT_CLIENTS=$AMOUNT_CLIENTS
     networks:
       - testing_net
     volumes:
