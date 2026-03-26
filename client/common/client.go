@@ -73,7 +73,14 @@ func (c *Client) Run() {
 		return
 	}
 
-	if err := c.protocol.SendBatchesFromCSV(); err != nil {
+	batchBuilder, err := NewBatchBuilder(c.config.ID, c.config.MaxBatchAmount, c.config.MaxBatchSize)
+	if err != nil {
+		c.log.Errorf("action: send_batch | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	defer batchBuilder.Close()
+
+	if err := c.runBatchLoop(batchBuilder); err != nil {
 		c.log.Errorf("action: send_batch | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return
 	}
@@ -83,6 +90,25 @@ func (c *Client) Run() {
 	}
 
 	c.log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) runBatchLoop(batchBuilder *BatchBuilder) error {
+	for {
+		bets, reachedEOF, err := batchBuilder.NextBatch()
+		if err != nil {
+			return err
+		}
+
+		if len(bets) > 0 {
+			if err := c.protocol.SendBatch(bets); err != nil {
+				return err
+			}
+		}
+
+		if reachedEOF {
+			return nil
+		}
+	}
 }
 
 func (c *Client) isShutdownRequested() bool {

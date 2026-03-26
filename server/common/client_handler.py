@@ -4,6 +4,8 @@ from .protocol import parse_agency, parse_batch_count, parse_bet_line
 from .utils import store_bets
 
 MESSAGE_FIN = 'FIN'
+MESSAGE_OK = 'ok\n'
+MESSAGE_ERROR = 'error\n'
 
 class ClientHandler:
     def __init__(self, client):
@@ -60,11 +62,11 @@ class ClientHandler:
 
                     store_bets(bets)
                     logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
-                    self._client.send('ok\n')
+                    self._client.send(MESSAGE_OK)
                 except (ValueError, KeyError) as batch_error:
                     logging.info(f'action: apuesta_recibida | result: fail | cantidad: {batch_count}')
                     logging.error(f'action: receive_message | result: fail | ip: {self._client._ip} | error: {batch_error}')
-                    self._client.send('error\n')
+                    self._client.send(MESSAGE_ERROR)
         except (OSError, ValueError, KeyError) as e:
             logging.error(f'action: receive_message | result: fail | ip: {self._client._ip} | error: {e}')
         finally:

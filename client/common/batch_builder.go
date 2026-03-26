@@ -7,88 +7,95 @@ import (
 	"os"
 )
 
-func (p *Protocol) openAgencyCSVFile() (*os.File, error) {
-	file, err := os.Open(fmt.Sprintf(AGENCY_CSV_PATH_TEMPLATE, p.clientID))
+// BatchBuilder reads bets from CSV and creates batches with amount/size limits.
+type BatchBuilder struct {
+	file      *os.File
+	reader    *csv.Reader
+	maxAmount int
+	maxSize   int
+	carry     Bet
+}
+
+func NewBatchBuilder(clientID string, maxAmount int, maxSize int) (*BatchBuilder, error) {
+	if maxAmount <= 0 {
+		return nil, fmt.Errorf("invalid max batch amount: %d", maxAmount)
+	}
+	if maxSize <= 0 {
+		return nil, fmt.Errorf("invalid max batch size: %d", maxSize)
+	}
+
+	file, err := os.Open(fmt.Sprintf(AGENCY_CSV_PATH_TEMPLATE, clientID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CSV file: %v", err)
 	}
 
-	return file, nil
+	return &BatchBuilder{
+		file:      file,
+		reader:    csv.NewReader(file),
+		maxAmount: maxAmount,
+		maxSize:   maxSize,
+		carry:     Bet{},
+	}, nil
 }
 
-func (p *Protocol) sendBatchesLoop(file *os.File) error {
-	reader := csv.NewReader(file)
-	carry := Bet{}
+func (b *BatchBuilder) Close() error {
+	if b.file == nil {
+		return nil
+	}
+
+	return b.file.Close()
+}
+
+// NextBatch returns the next batch, plus a flag indicating if EOF was reached.
+func (b *BatchBuilder) NextBatch() ([]Bet, bool, error) {
+	bets, packageSize, err := b.initializeBatchWithCarry()
+	if err != nil {
+		return nil, false, err
+	}
 
 	for {
-		bets, pendingBet, reachedEOF, err := p.readNextBatch(reader, carry)
+		if len(bets) >= b.maxAmount {
+			return bets, false, nil
+		}
+
+		bet, reachedEOF, err := readNextValidBet(b.reader)
 		if err != nil {
-			return err
-		}
-
-		carry = pendingBet
-		if len(bets) == 0 {
-			if reachedEOF {
-				return nil
-			}
-			continue
-		}
-
-		if err := p.sendBatch(bets); err != nil {
-			return err
-		}
-
-		if reachedEOF && carry == (Bet{}) {
-			return nil
-		}
-	}
-}
-
-func (p *Protocol) readNextBatch(reader *csv.Reader, carry Bet) ([]Bet, Bet, bool, error) {
-	bets, packageSize, err := p.initializeBatchWithCarry(carry)
-	if err != nil {
-		return nil, Bet{}, false, err
-	}
-
-	for len(bets) < p.maxAmount {
-		bet, reachedEOF, err := readNextValidBet(reader)
-		if err != nil {
-			return nil, Bet{}, false, err
+			return nil, false, err
 		}
 		if reachedEOF {
-			return bets, Bet{}, true, nil
+			return bets, true, nil
 		}
 
 		betSize := serializedBetSize(bet)
-		if betSize > p.maxSize {
-			return nil, Bet{}, false, fmt.Errorf("single bet exceeds max packet size")
+		if betSize > b.maxSize {
+			return nil, false, fmt.Errorf("single bet exceeds max packet size")
 		}
 
-		if packageSize+betSize > p.maxSize {
-			return bets, bet, false, nil
+		if packageSize+betSize > b.maxSize {
+			b.carry = bet
+			return bets, false, nil
 		}
 
 		bets = append(bets, bet)
 		packageSize += betSize
 	}
-
-	return bets, Bet{}, false, nil
 }
 
-func (p *Protocol) initializeBatchWithCarry(carry Bet) ([]Bet, int, error) {
+func (b *BatchBuilder) initializeBatchWithCarry() ([]Bet, int, error) {
 	bets := []Bet{}
 	packageSize := 0
 
-	if carry == (Bet{}) {
+	if b.carry == (Bet{}) {
 		return bets, packageSize, nil
 	}
 
-	carrySize := serializedBetSize(carry)
-	if carrySize > p.maxSize {
+	carrySize := serializedBetSize(b.carry)
+	if carrySize > b.maxSize {
 		return nil, 0, fmt.Errorf("single bet exceeds max packet size")
 	}
 
-	bets = append(bets, carry)
+	bets = append(bets, b.carry)
+	b.carry = Bet{}
 	packageSize = carrySize
 	return bets, packageSize, nil
 }

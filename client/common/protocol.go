@@ -4,35 +4,25 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/op/go-logging"
 )
 
 const AGENCY_CSV_PATH_TEMPLATE = "/.data/agency-%s.csv"
 const MESSAGE_FIN = "FIN"
+const MESSAGE_OK = "ok"
+const MESSAGE_ERROR = "error"
 
 // Protocol manages serialization and sending of bets batches
 type Protocol struct {
 	connection *Connection
 	log        *logging.Logger
 	clientID   string
-	maxAmount  int
-	maxSize    int
 }
 
 // NewProtocol creates a new Protocol instance
 func NewProtocol(config ClientConfig, connection *Connection) (*Protocol, error) {
-
-	if config.MaxBatchAmount <= 0 {
-		config.Log.Warningf("Invalid max batch amount %v", config.MaxBatchAmount)
-		return nil, fmt.Errorf("invalid max batch amount: %d", config.MaxBatchAmount)
-	}
-
-	if config.MaxBatchSize <= 0 {
-		config.Log.Warningf("Invalid max batch size %v", config.MaxBatchSize)
-		return nil, fmt.Errorf("invalid max batch size: %d", config.MaxBatchSize)
-	}
-
 	if connection == nil {
 		return nil, fmt.Errorf("connection cannot be nil")
 	}
@@ -41,8 +31,6 @@ func NewProtocol(config ClientConfig, connection *Connection) (*Protocol, error)
 		connection: connection,
 		log:        config.Log,
 		clientID:   config.ID,
-		maxAmount:  config.MaxBatchAmount,
-		maxSize:    config.MaxBatchSize,
 	}, nil
 }
 
@@ -66,18 +54,8 @@ func (p *Protocol) SendFINMessage() error {
 	return nil
 }
 
-// SendBatchesFromCSV reads the agency CSV and sends batches to server.
-func (p *Protocol) SendBatchesFromCSV() error {
-	file, err := p.openAgencyCSVFile()
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return p.sendBatchesLoop(file)
-}
-
-func (p *Protocol) sendBatch(bets []Bet) error {
+// SendBatch sends one bets batch and waits for server confirmation.
+func (p *Protocol) SendBatch(bets []Bet) error {
 	payload := p.serializeBatchPayload(bets)
 	if err := p.connection.Send(payload); err != nil {
 		return err
@@ -87,6 +65,18 @@ func (p *Protocol) sendBatch(bets []Bet) error {
 	if err != nil || confirmation == "" {
 		p.log.Errorf("action: receive_confirmation | result: fail | error: %v", err)
 		return fmt.Errorf("failed to receive confirmation: %v", err)
+	}
+
+	confirmation = strings.ToLower(strings.TrimSpace(confirmation))
+	switch confirmation {
+	case MESSAGE_OK:
+		// Expected successful ACK.
+	case MESSAGE_ERROR:
+		p.log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: server rejected batch", p.clientID)
+		return fmt.Errorf("server rejected batch")
+	default:
+		p.log.Errorf("action: receive_confirmation | result: fail | client_id: %v | error: unexpected confirmation %q", p.clientID, confirmation)
+		return fmt.Errorf("unexpected batch confirmation: %q", confirmation)
 	}
 
 	p.log.Infof("action: batch_enviado | result: success | cantidad: %v | size: %v", len(bets), len(payload))

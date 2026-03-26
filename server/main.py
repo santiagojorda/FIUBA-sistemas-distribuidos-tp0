@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import logging
-from common.config import load_server_config
-from common.logging_config import initialize_log
+from config.config import load_server_config
+from config.logging_config import initialize_log
 from common.server import Server
 
 

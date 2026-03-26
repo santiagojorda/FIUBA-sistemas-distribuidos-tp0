@@ -22,6 +22,12 @@ MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-8192}"
 
 
 Agrego los archivos de apuestas, montando un volumen en cada cliente
-```
+```bash
   - ./.data:/.data:ro
 ```
+El protocolo de comunicación entre cliente y servidor se modificó para enviar y recibir batchs de apuestas, en lugar de apuestas individuales. El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente.
+
+Para modularizar, cree un `batch_builder` que se encarga de leer el archivo de apuestas y construir los batchs a enviar al servidor, respetando la cantidad máxima de apuestas por batch definida en la variable de entorno `MAX_BATCH_SIZE`.
+
+El servidor procesa cada apuesta del batch y responde con éxito solamente si todas las apuestas fueron procesadas correctamente. En caso de detectar un error con alguna de las apuestas, responde con un código de error y registra el fallo en el log.
+
