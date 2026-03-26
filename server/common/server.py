@@ -26,14 +26,6 @@ class Server:
         logging.info('action: graceful_shutdown | result: in_progress')
 
     def run(self):
-        """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
-        """
-
         while not self._shutdown:
             client_sock = self.__accept_new_connection()
             if client_sock is None:
@@ -73,13 +65,6 @@ class Server:
         return self._winners_by_agency.get(agency, 0)
 
     def __accept_new_connection(self):
-        """
-        Accept new connections
-
-        Function blocks until a connection to a client is made.
-        Then connection created is printed and returned
-        """
-
         try:
             logging.info('action: accept_connections | result: in_progress')
             client_socket, addr = self._server_socket.accept()
