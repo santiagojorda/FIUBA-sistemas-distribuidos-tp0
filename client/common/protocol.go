@@ -11,6 +11,7 @@ import (
 
 const AGENCY_CSV_PATH_TEMPLATE = "/.data/agency-%s.csv"
 const MESSAGE_FIN = "FIN"
+const MESSAGE_END_BATCH = "END_BATCH"
 const MESSAGE_OK = "ok"
 const MESSAGE_ERROR = "error"
 
@@ -85,13 +86,14 @@ func (p *Protocol) SendBatch(bets []Bet) error {
 
 func (p *Protocol) serializeBatchPayload(bets []Bet) []byte {
 	var buffer bytes.Buffer
-	buffer.WriteString(strconv.Itoa(len(bets)))
-	buffer.WriteString("\n")
 
 	for _, bet := range bets {
 		formatBet(&buffer, bet)
 		buffer.WriteString("\n")
 	}
+
+	buffer.WriteString(MESSAGE_END_BATCH)
+	buffer.WriteString("\n")
 	return buffer.Bytes()
 }
 
