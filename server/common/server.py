@@ -1,8 +1,8 @@
 import socket
 import logging
 import signal
-import threading
 
+RECV_BUFFER = 1024
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -12,11 +12,11 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._server_socket.settimeout(1.0)
         self._clients = []
-        self._shutdown_event = threading.Event()
+        self._shutdown_event = False
         signal.signal(signal.SIGTERM, self.__handle_graceful_shutdown)
 
     def __handle_graceful_shutdown(self, signum, frame):
-        self._shutdown_event.set()
+        self._shutdown_event = True
         logging.info('action: graceful_shutdown | result: in_progress')
 
     def run(self):
@@ -30,7 +30,7 @@ class Server:
 
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
-        while not self._shutdown_event.is_set():
+        while not self._shutdown_event:
             client_sock = self.__accept_new_connection()
             if client_sock is None:
                 continue
@@ -59,7 +59,7 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
+            msg = client_sock.recv(RECV_BUFFER).rstrip().decode('utf-8')
             addr = client_sock.getpeername()
             logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
             # TODO: Modify the send to avoid short-writes
@@ -91,7 +91,7 @@ class Server:
         except socket.timeout:
             return None
         except OSError as e:
-            if self._shutdown_event.is_set():
+            if self._shutdown_event:
                 return None
             logging.error(f'action: accept_connections | result: fail | error: {e}')
             return None
