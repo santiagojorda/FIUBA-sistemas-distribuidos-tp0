@@ -1,6 +1,6 @@
 import logging
 
-from .parser import parse_agency, parse_bet_line
+from .bet_parser import parse_agency, parse_bet_line
 from .utils import store_bets
 
 MESSAGE_FIN = 'FIN'
